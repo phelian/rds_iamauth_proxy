@@ -50,11 +50,14 @@
 //! [`tower`]: https://crates.io/crates/tower
 //! [`aws-smithy-runtime`]: https://crates.io/crates/aws-smithy-runtime
 
+use crate::box_error::BoxError;
+use crate::client::connector_metadata::ConnectorMetadata;
 use crate::client::orchestrator::{HttpRequest, HttpResponse};
 use crate::client::result::ConnectorError;
 use crate::client::runtime_components::sealed::ValidateConfig;
-use crate::client::runtime_components::RuntimeComponents;
+use crate::client::runtime_components::{RuntimeComponents, RuntimeComponentsBuilder};
 use crate::impl_shared_conversions;
+use aws_smithy_types::config_bag::ConfigBag;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -143,6 +146,35 @@ pub trait HttpClient: Send + Sync + fmt::Debug {
         settings: &HttpConnectorSettings,
         components: &RuntimeComponents,
     ) -> SharedHttpConnector;
+
+    #[doc = include_str!("../../rustdoc/validate_base_client_config.md")]
+    fn validate_base_client_config(
+        &self,
+        runtime_components: &RuntimeComponentsBuilder,
+        cfg: &ConfigBag,
+    ) -> Result<(), BoxError> {
+        let _ = (runtime_components, cfg);
+        Ok(())
+    }
+
+    #[doc = include_str!("../../rustdoc/validate_final_config.md")]
+    fn validate_final_config(
+        &self,
+        runtime_components: &RuntimeComponents,
+        cfg: &ConfigBag,
+    ) -> Result<(), BoxError> {
+        let _ = (runtime_components, cfg);
+        Ok(())
+    }
+
+    /// Provide metadata about the crate that this HttpClient uses to make connectors.
+    ///
+    /// If this is implemented and returns metadata, interceptors may inspect it
+    /// for the purpose of inserting that data into the user agent string when
+    /// making a request with this client.
+    fn connector_metadata(&self) -> Option<ConnectorMetadata> {
+        None
+    }
 }
 
 /// Shared HTTP client for use across multiple clients and requests.
@@ -168,9 +200,30 @@ impl HttpClient for SharedHttpClient {
     ) -> SharedHttpConnector {
         self.selector.http_connector(settings, components)
     }
+
+    fn connector_metadata(&self) -> Option<ConnectorMetadata> {
+        self.selector.connector_metadata()
+    }
 }
 
-impl ValidateConfig for SharedHttpClient {}
+impl ValidateConfig for SharedHttpClient {
+    fn validate_base_client_config(
+        &self,
+        runtime_components: &RuntimeComponentsBuilder,
+        cfg: &ConfigBag,
+    ) -> Result<(), BoxError> {
+        self.selector
+            .validate_base_client_config(runtime_components, cfg)
+    }
+
+    fn validate_final_config(
+        &self,
+        runtime_components: &RuntimeComponents,
+        cfg: &ConfigBag,
+    ) -> Result<(), BoxError> {
+        self.selector.validate_final_config(runtime_components, cfg)
+    }
+}
 
 impl_shared_conversions!(convert SharedHttpClient from HttpClient using SharedHttpClient::new);
 

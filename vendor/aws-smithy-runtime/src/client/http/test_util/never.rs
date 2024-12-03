@@ -6,6 +6,7 @@
 //! Test connectors that never return data
 
 use aws_smithy_async::future::never::Never;
+use aws_smithy_runtime_api::client::connector_metadata::ConnectorMetadata;
 use aws_smithy_runtime_api::client::http::{
     HttpClient, HttpConnector, HttpConnectorFuture, HttpConnectorSettings, SharedHttpConnector,
 };
@@ -53,6 +54,10 @@ impl HttpClient for NeverClient {
     ) -> SharedHttpConnector {
         self.clone().into_shared()
     }
+
+    fn connector_metadata(&self) -> Option<ConnectorMetadata> {
+        Some(ConnectorMetadata::new("never-client", None))
+    }
 }
 
 /// A TCP connector that never connects.
@@ -70,7 +75,7 @@ impl NeverTcpConnector {
 }
 
 #[cfg(feature = "connector-hyper-0-14-x")]
-impl hyper_0_14::service::Service<http::Uri> for NeverTcpConnector {
+impl hyper_0_14::service::Service<http_02x::Uri> for NeverTcpConnector {
     type Response = connection::NeverTcpConnection;
     type Error = aws_smithy_runtime_api::box_error::BoxError;
     type Future = std::pin::Pin<
@@ -84,7 +89,7 @@ impl hyper_0_14::service::Service<http::Uri> for NeverTcpConnector {
         std::task::Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _: http::Uri) -> Self::Future {
+    fn call(&mut self, _: http_02x::Uri) -> Self::Future {
         Box::pin(async {
             Never::new().await;
             unreachable!()
@@ -143,9 +148,9 @@ mod connection {
 #[cfg(all(test, feature = "connector-hyper-0-14-x"))]
 #[tokio::test]
 async fn never_tcp_connector_plugs_into_hyper_014() {
-    use super::*;
     use crate::client::http::hyper_014::HyperClientBuilder;
     use aws_smithy_async::rt::sleep::TokioSleep;
+    use aws_smithy_async::time::SystemTimeSource;
     use aws_smithy_runtime_api::client::runtime_components::RuntimeComponentsBuilder;
     use std::time::Duration;
 
@@ -153,6 +158,7 @@ async fn never_tcp_connector_plugs_into_hyper_014() {
     let client = HyperClientBuilder::new().build(NeverTcpConnector::new());
     let components = RuntimeComponentsBuilder::for_tests()
         .with_sleep_impl(Some(TokioSleep::new()))
+        .with_time_source(Some(SystemTimeSource::new()))
         .build()
         .unwrap();
     let http_connector = client.http_connector(

@@ -2,7 +2,7 @@
   <h1><code>rustix</code></h1>
 
   <p>
-    <strong>Safe Rust bindings to POSIX/Unix/Linux/Winsock2 syscalls</strong>
+    <strong>Safe Rust bindings to POSIX/Unix/Linux/Winsock syscalls</strong>
   </p>
 
   <strong>A <a href="https://bytecodealliance.org/">Bytecode Alliance</a> project</strong>
@@ -16,17 +16,17 @@
 </div>
 
 `rustix` provides efficient memory-safe and [I/O-safe] wrappers to POSIX-like,
-Unix-like, Linux, and Winsock2 syscall-like APIs, with configurable backends.
-It uses Rust references, slices, and return values instead of raw pointers, and
+Unix-like, Linux, and Winsock syscall-like APIs, with configurable backends. It
+uses Rust references, slices, and return values instead of raw pointers, and
 [I/O safety types] instead of raw file descriptors, providing memory safety,
 [I/O safety], and [provenance]. It uses `Result`s for reporting errors,
 [`bitflags`] instead of bare integer flags, an [`Arg`] trait with optimizations
 to efficiently accept any Rust string type, and several other efficient
 conveniences.
 
-`rustix` is low-level and, and while the `net` API supports Winsock2 on
-Windows, the rest of the APIs do not support Windows; for higher-level and more
-portable APIs built on this functionality, see the [`cap-std`], [`memfd`],
+`rustix` is low-level and, and while the `net` API supports [Windows Sockets 2]
+(Winsock), the rest of the APIs do not support Windows; for higher-level and
+more portable APIs built on this functionality, see the [`cap-std`], [`memfd`],
 [`timerfd`], and [`io-streams`] crates, for example.
 
 `rustix` currently has two backends available:
@@ -42,18 +42,18 @@ portable APIs built on this functionality, see the [`cap-std`], [`memfd`],
       provenance all the way down to the syscalls.
 
  * libc, which uses the [`libc`] crate which provides bindings to native `libc`
-   libraries on Unix-family platforms, and [`windows-sys`] for Winsock2 on
+   libraries on Unix-family platforms, and [`windows-sys`] for Winsock on
    Windows, and is portable to many OS's.
 
 The linux_raw backend is enabled by default on platforms which support it. To
-enable the libc backend instead, either enable the "use-libc" cargo feature,
-or set the `RUSTFLAGS` environment variable to `--cfg=rustix_use_libc` when
+enable the libc backend instead, either enable the "use-libc" cargo feature, or
+set the `RUSTFLAGS` environment variable to `--cfg=rustix_use_libc` when
 building.
 
 ## Cargo features
 
-The modules [`rustix::io`], [`rustix::fd`], and [`rustix::ffi`] are enabled
-by default. The rest of the API is conditional with cargo feature flags:
+The modules [`rustix::io`], [`rustix::fd`], and [`rustix::ffi`] are enabled by
+default. The rest of the API is conditional with cargo feature flags:
 
 | Name       | Description                                                    |
 | ---------- | -------------------------------------------------------------- |
@@ -165,6 +165,7 @@ always reflect “very old” Linux versions.
 [any current Rust target]: https://doc.rust-lang.org/nightly/rustc/platform-support.html
 [kernel.org]: https://www.kernel.org/releases.html
 [Rust on Debian stable]: https://packages.debian.org/stable/rust/rustc
+[Windows Sockets 2]: https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-start-page-2
 [`nix`]: https://crates.io/crates/nix
 [`unix`]: https://crates.io/crates/unix
 [`nc`]: https://crates.io/crates/nc

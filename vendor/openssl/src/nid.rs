@@ -79,8 +79,6 @@ impl Nid {
     }
 
     /// Returns the `Nid`s of the digest and public key algorithms associated with a signature ID.
-    ///
-    /// This corresponds to `OBJ_find_sigid_algs`.
     #[corresponds(OBJ_find_sigid_algs)]
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn signature_algorithms(&self) -> Option<SignatureAlgorithms> {
@@ -215,11 +213,13 @@ impl Nid {
     pub const SECT409R1: Nid = Nid(ffi::NID_sect409r1);
     pub const SECT571K1: Nid = Nid(ffi::NID_sect571k1);
     pub const SECT571R1: Nid = Nid(ffi::NID_sect571r1);
-    #[cfg(ossl110)]
+    #[cfg(any(ossl110, libressl))]
     pub const BRAINPOOL_P256R1: Nid = Nid(ffi::NID_brainpoolP256r1);
-    #[cfg(ossl110)]
+    #[cfg(any(ossl110, libressl))]
+    pub const BRAINPOOL_P320R1: Nid = Nid(ffi::NID_brainpoolP320r1);
+    #[cfg(any(ossl110, libressl))]
     pub const BRAINPOOL_P384R1: Nid = Nid(ffi::NID_brainpoolP384r1);
-    #[cfg(ossl110)]
+    #[cfg(any(ossl110, libressl))]
     pub const BRAINPOOL_P512R1: Nid = Nid(ffi::NID_brainpoolP512r1);
     pub const WAP_WSG_IDM_ECID_WTLS1: Nid = Nid(ffi::NID_wap_wsg_idm_ecid_wtls1);
     pub const WAP_WSG_IDM_ECID_WTLS3: Nid = Nid(ffi::NID_wap_wsg_idm_ecid_wtls3);

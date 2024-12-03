@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// TODO(msrvUpgrade): This can be removed once we upgrade the MSRV to Rust 1.69
-#![allow(unknown_lints)]
-
 use self::auth::orchestrate_auth;
 use crate::client::interceptors::Interceptors;
-use crate::client::orchestrator::endpoints::orchestrate_endpoint;
 use crate::client::orchestrator::http::{log_response_body, read_body};
 use crate::client::timeout::{MaybeTimeout, MaybeTimeoutConfig, TimeoutKind};
+use crate::client::{
+    http::body::minimum_throughput::MaybeUploadThroughputCheckFuture,
+    orchestrator::endpoints::orchestrate_endpoint,
+};
 use aws_smithy_async::rt::sleep::AsyncSleep;
 use aws_smithy_runtime_api::box_error::BoxError;
 use aws_smithy_runtime_api::client::http::{HttpClient, HttpConnector, HttpConnectorSettings};
@@ -30,7 +30,7 @@ use aws_smithy_runtime_api::client::ser_de::{
 use aws_smithy_types::body::SdkBody;
 use aws_smithy_types::byte_stream::ByteStream;
 use aws_smithy_types::config_bag::ConfigBag;
-use aws_smithy_types::timeout::TimeoutConfig;
+use aws_smithy_types::timeout::{MergeTimeoutConfig, TimeoutConfig};
 use std::mem;
 use tracing::{debug, debug_span, instrument, trace, Instrument};
 
@@ -159,12 +159,17 @@ pub async fn invoke_with_stop_point(
                 try_op(&mut ctx, cfg, &runtime_components, stop_point).await;
             }
             finally_op(&mut ctx, cfg, &runtime_components).await;
-            Ok(ctx)
+            if ctx.is_failed() {
+                Err(ctx.finalize().expect_err("it is failed"))
+            } else {
+                Ok(ctx)
+            }
         }
         .maybe_timeout(operation_timeout_config)
         .await
     }
-    .instrument(debug_span!("invoke", service = %service_name, operation = %operation_name))
+    // Include a random, internal-only, seven-digit ID for the operation invocation so that it can be correlated in the logs.
+    .instrument(debug_span!("invoke", service = %service_name, operation = %operation_name, sdk_invocation_id = fastrand::u32(1_000_000..10_000_000)))
     .await
 }
 
@@ -189,6 +194,16 @@ fn apply_configuration(
         .merge_from(&operation_rc_builder)
         .build()?;
 
+    // In an ideal world, we'd simply update `cfg.load` to behave this way. Unfortunately, we can't
+    // do that without a breaking change. By overwriting the value in the config bag with a merged
+    // version, we can achieve a very similar behavior. `MergeTimeoutConfig`
+    let resolved_timeout_config = cfg.load::<MergeTimeoutConfig>();
+    debug!(
+        "timeout settings for this operation: {:?}",
+        resolved_timeout_config
+    );
+    cfg.interceptor_state().store_put(resolved_timeout_config);
+
     components.validate_final_config(cfg)?;
     Ok(components)
 }
@@ -202,8 +217,8 @@ async fn try_op(
 ) {
     // Before serialization
     run_interceptors!(halt_on_err: {
-        read_before_serialization(ctx, runtime_components, cfg);
         modify_before_serialization(ctx, runtime_components, cfg);
+        read_before_serialization(ctx, runtime_components, cfg);
     });
 
     // Serialization
@@ -374,7 +389,12 @@ async fn try_attempt(
             builder.build()
         };
         let connector = http_client.http_connector(&settings, runtime_components);
-        connector.call(request).await.map_err(OrchestratorError::connector)
+        let response_future = MaybeUploadThroughputCheckFuture::new(
+            cfg,
+            runtime_components,
+            connector.call(request),
+        );
+        response_future.await.map_err(OrchestratorError::connector)
     });
     trace!(response = ?response, "received response from service");
     ctx.set_response(response);
@@ -444,14 +464,15 @@ async fn finally_op(
 
 #[cfg(all(test, feature = "test-util"))]
 mod tests {
-    use super::*;
     use crate::client::auth::no_auth::{NoAuthRuntimePlugin, NO_AUTH_SCHEME_ID};
+    use crate::client::http::test_util::NeverClient;
     use crate::client::orchestrator::endpoints::StaticUriEndpointResolver;
+    use crate::client::orchestrator::{invoke, invoke_with_stop_point, StopPoint};
     use crate::client::retries::strategy::NeverRetryStrategy;
     use crate::client::test_util::{
         deserializer::CannedResponseDeserializer, serializer::CannedRequestSerializer,
     };
-    use ::http::{Response, StatusCode};
+    use aws_smithy_runtime_api::box_error::BoxError;
     use aws_smithy_runtime_api::client::auth::static_resolver::StaticAuthSchemeOptionResolver;
     use aws_smithy_runtime_api::client::auth::{
         AuthSchemeOptionResolverParams, SharedAuthSchemeOptionResolver,
@@ -467,15 +488,23 @@ mod tests {
         BeforeDeserializationInterceptorContextRef, BeforeSerializationInterceptorContextMut,
         BeforeSerializationInterceptorContextRef, BeforeTransmitInterceptorContextMut,
         BeforeTransmitInterceptorContextRef, FinalizerInterceptorContextMut,
-        FinalizerInterceptorContextRef,
+        FinalizerInterceptorContextRef, Input, Output,
     };
     use aws_smithy_runtime_api::client::interceptors::{Intercept, SharedInterceptor};
-    use aws_smithy_runtime_api::client::orchestrator::HttpRequest;
+    use aws_smithy_runtime_api::client::orchestrator::{HttpRequest, OrchestratorError};
     use aws_smithy_runtime_api::client::retries::SharedRetryStrategy;
-    use aws_smithy_runtime_api::client::runtime_components::RuntimeComponentsBuilder;
+    use aws_smithy_runtime_api::client::runtime_components::{
+        RuntimeComponents, RuntimeComponentsBuilder,
+    };
     use aws_smithy_runtime_api::client::runtime_plugin::{RuntimePlugin, RuntimePlugins};
+    use aws_smithy_runtime_api::client::ser_de::{
+        SharedRequestSerializer, SharedResponseDeserializer,
+    };
     use aws_smithy_runtime_api::shared::IntoShared;
+    use aws_smithy_types::body::SdkBody;
     use aws_smithy_types::config_bag::{ConfigBag, FrozenLayer, Layer};
+    use aws_smithy_types::timeout::TimeoutConfig;
+    use http_02x::{Response, StatusCode};
     use std::borrow::Cow;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -506,7 +535,7 @@ mod tests {
 
     impl HttpConnector for OkConnector {
         fn call(&self, _request: HttpRequest) -> HttpConnectorFuture {
-            HttpConnectorFuture::ready(Ok(::http::Response::builder()
+            HttpConnectorFuture::ready(Ok(http_02x::Response::builder()
                 .status(200)
                 .body(SdkBody::empty())
                 .expect("OK response is valid")
@@ -1268,6 +1297,7 @@ mod tests {
         struct TestInterceptorRuntimePlugin {
             builder: RuntimeComponentsBuilder,
         }
+
         impl RuntimePlugin for TestInterceptorRuntimePlugin {
             fn runtime_components(
                 &self,
@@ -1278,18 +1308,20 @@ mod tests {
         }
 
         let interceptor = TestInterceptor::default();
+        let client = NeverClient::new();
         let runtime_plugins = || {
             RuntimePlugins::new()
                 .with_operation_plugin(TestOperationRuntimePlugin::new())
                 .with_operation_plugin(NoAuthRuntimePlugin::new())
                 .with_operation_plugin(TestInterceptorRuntimePlugin {
                     builder: RuntimeComponentsBuilder::new("test")
-                        .with_interceptor(SharedInterceptor::new(interceptor.clone())),
+                        .with_interceptor(SharedInterceptor::new(interceptor.clone()))
+                        .with_http_client(Some(client.clone())),
                 })
         };
 
         // StopPoint::BeforeTransmit will exit right before sending the request, so there should be no response
-        let context = invoke_with_stop_point(
+        let _err = invoke_with_stop_point(
             "test",
             "test",
             Input::doesnt_matter(),
@@ -1297,8 +1329,8 @@ mod tests {
             StopPoint::BeforeTransmit,
         )
         .await
-        .expect("success");
-        assert!(context.response().is_none());
+        .expect_err("an error was returned");
+        assert_eq!(client.num_calls(), 0);
 
         assert!(interceptor
             .inner

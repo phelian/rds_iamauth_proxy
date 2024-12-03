@@ -81,14 +81,14 @@ impl Intercept for ConnectionPoisoningInterceptor {
             reconnect_mode == ReconnectMode::ReconnectOnTransientError;
 
         if error_is_transient && connection_poisoning_is_enabled {
-            debug!("received a transient error, poisoning the connection...");
+            debug!("received a transient error, marking the connection for closure...");
 
             if let Some(captured_connection) = captured_connection.and_then(|conn| conn.get()) {
                 captured_connection.poison();
-                debug!("the connection was poisoned")
+                debug!("the connection was marked for closure")
             } else {
                 error!(
-                    "unable to poison the connection because no connection was found! The underlying HTTP connector never set a connection."
+                    "unable to mark the connection for closure because no connection was found! The underlying HTTP connector never set a connection."
                 );
             }
         }
@@ -100,7 +100,6 @@ impl Intercept for ConnectionPoisoningInterceptor {
 type LoaderFn = dyn Fn() -> Option<ConnectionMetadata> + Send + Sync;
 
 /// State for a middleware that will monitor and manage connections.
-#[allow(missing_debug_implementations)]
 #[derive(Clone, Default)]
 pub struct CaptureSmithyConnection {
     loader: Arc<Mutex<Option<Box<LoaderFn>>>>,
@@ -154,7 +153,14 @@ mod test {
         let retriever = CaptureSmithyConnection::new();
         let retriever_clone = retriever.clone();
         assert!(retriever.get().is_none());
-        retriever.set_connection_retriever(|| Some(ConnectionMetadata::new(true, None, || {})));
+        retriever.set_connection_retriever(|| {
+            Some(
+                ConnectionMetadata::builder()
+                    .proxied(true)
+                    .poison_fn(|| {})
+                    .build(),
+            )
+        });
 
         assert!(retriever.get().is_some());
         assert!(retriever_clone.get().is_some());

@@ -51,7 +51,8 @@ use crate::ssl::SslFiletype;
 #[cfg(ossl300)]
 use crate::stack::Stack;
 use crate::stack::StackRef;
-#[cfg(any(ossl102, libressl261))]
+use crate::util::ForeignTypeRefExt;
+#[cfg(any(ossl102, boringssl, libressl261))]
 use crate::x509::verify::{X509VerifyFlags, X509VerifyParamRef};
 use crate::x509::{X509Object, X509PurposeId, X509};
 use crate::{cvt, cvt_p};
@@ -122,7 +123,7 @@ impl X509StoreBuilderRef {
 
     /// Sets certificate chain validation related flags.
     #[corresponds(X509_STORE_set_flags)]
-    #[cfg(any(ossl102, libressl261))]
+    #[cfg(any(ossl102, boringssl, libressl261))]
     pub fn set_flags(&mut self, flags: X509VerifyFlags) -> Result<(), ErrorStack> {
         unsafe { cvt(ffi::X509_STORE_set_flags(self.as_ptr(), flags.bits())).map(|_| ()) }
     }
@@ -136,7 +137,7 @@ impl X509StoreBuilderRef {
 
     /// Sets certificate chain validation related parameters.
     #[corresponds[X509_STORE_set1_param]]
-    #[cfg(any(ossl102, libressl261))]
+    #[cfg(any(ossl102, boringssl, libressl261))]
     pub fn set_param(&mut self, param: &X509VerifyParamRef) -> Result<(), ErrorStack> {
         unsafe { cvt(ffi::X509_STORE_set1_param(self.as_ptr(), param.as_ptr())).map(|_| ()) }
     }
@@ -165,9 +166,7 @@ impl X509Lookup<HashDir> {
     /// directory.
     #[corresponds(X509_LOOKUP_hash_dir)]
     pub fn hash_dir() -> &'static X509LookupMethodRef<HashDir> {
-        // `*mut` cast is needed because BoringSSL returns a `*const`. This is
-        // ok because we only return an immutable reference.
-        unsafe { X509LookupMethodRef::from_ptr(ffi::X509_LOOKUP_hash_dir() as *mut _) }
+        unsafe { X509LookupMethodRef::from_const_ptr(ffi::X509_LOOKUP_hash_dir()) }
     }
 }
 
@@ -199,9 +198,7 @@ impl X509Lookup<File> {
     /// into memory at the time the file is added as a lookup source.
     #[corresponds(X509_LOOKUP_file)]
     pub fn file() -> &'static X509LookupMethodRef<File> {
-        // `*mut` cast is needed because BoringSSL returns a `*const`. This is
-        // ok because we only return an immutable reference.
-        unsafe { X509LookupMethodRef::from_ptr(ffi::X509_LOOKUP_file() as *mut _) }
+        unsafe { X509LookupMethodRef::from_const_ptr(ffi::X509_LOOKUP_file()) }
     }
 }
 

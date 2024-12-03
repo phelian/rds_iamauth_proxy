@@ -18,9 +18,9 @@ information.
 [Documentation (release)][docs-url] | [Documentation (master)][docs-master-url] | [Chat][discord-url]
 
 [crates-badge]: https://img.shields.io/crates/v/tracing-error.svg
-[crates-url]: https://crates.io/crates/tracing-error/0.2.0
+[crates-url]: https://crates.io/crates/tracing-error/0.2.1
 [docs-badge]: https://docs.rs/tracing-error/badge.svg
-[docs-url]: https://docs.rs/tracing-error/0.2.0/tracing_error
+[docs-url]: https://docs.rs/tracing-error/0.2.1/tracing_error
 [docs-master-badge]: https://img.shields.io/badge/docs-master-blue
 [docs-master-url]: https://tracing-rs.netlify.com/tracing_error
 [mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
@@ -48,7 +48,7 @@ The crate provides the following:
 
 **Note**: This crate is currently experimental.
 
-*Compiler support: [requires `rustc` 1.42+][msrv]*
+*Compiler support: [requires `rustc` 1.63+][msrv]*
 
 [msrv]: #supported-rust-versions
 
@@ -186,14 +186,14 @@ fn main() {
 ## Supported Rust Versions
 
 Tracing is built against the latest stable release. The minimum supported
-version is 1.42. The current Tracing version is not guaranteed to build on Rust
+version is 1.63. The current Tracing version is not guaranteed to build on Rust
 versions earlier than the minimum supported version.
 
 Tracing follows the same compiler support policies as the rest of the Tokio
 project. The current stable Rust compiler and the three most recent minor
 versions before it will always be supported. For example, if the current stable
-compiler version is 1.45, the minimum supported version will not be increased
-past 1.42, three minor versions prior. Increasing the minimum supported compiler
+compiler version is 1.69, the minimum supported version will not be increased
+past 1.66, three minor versions prior. Increasing the minimum supported compiler
 version is not considered a semver breaking change as long as doing so complies
 with this policy.
 
@@ -234,5 +234,5 @@ terms or conditions.
 [subscriber layer]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/layer/trait.Layer.html
 [`tracing`]: https://docs.rs/tracing
 [`std::error::Error`]: https://doc.rust-lang.org/stable/std/error/trait.Error.html
-[`SpanTrace`]: https://docs.rs/tracing-error/0.2.0/tracing_error/struct.SpanTrace.html
-[`ErrorLayer`]: https://docs.rs/tracing-error/0.2.0/tracing_error/struct.ErrorLayer.html
+[`SpanTrace`]: https://docs.rs/tracing-error/0.2.1/tracing_error/struct.SpanTrace.html
+[`ErrorLayer`]: https://docs.rs/tracing-error/0.2.1/tracing_error/struct.ErrorLayer.html

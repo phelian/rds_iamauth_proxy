@@ -12,16 +12,19 @@
 [package]
 edition = "2021"
 name = "aws-credential-types"
-version = "1.0.3"
+version = "1.2.1"
 authors = ["AWS Rust SDK Team <aws-sdk-rust@amazon.com>"]
 description = "Types for AWS SDK credentials."
 readme = "README.md"
 license = "Apache-2.0"
 repository = "https://github.com/smithy-lang/smithy-rs"
-resolver = "1"
 
 [package.metadata.docs.rs]
 all-features = true
+cargo-args = [
+    "-Zunstable-options",
+    "-Zrustdoc-scrape-examples",
+]
 rustdoc-args = [
     "--cfg",
     "docsrs",
@@ -32,20 +35,23 @@ targets = ["x86_64-unknown-linux-gnu"]
 stable = true
 
 [dependencies.aws-smithy-async]
-version = "1.0.3"
+version = "1.2.1"
 
 [dependencies.aws-smithy-runtime-api]
-version = "1.0.3"
-features = ["client"]
+version = "1.7.2"
+features = [
+    "client",
+    "http-auth",
+]
 
 [dependencies.aws-smithy-types]
-version = "1.0.3"
+version = "1.2.4"
 
 [dependencies.zeroize]
 version = "1"
 
 [dev-dependencies.async-trait]
-version = "0.1.51"
+version = "0.1.74"
 
 [dev-dependencies.tokio]
 version = "1.23.1"
@@ -57,4 +63,4 @@ features = [
 
 [features]
 hardcoded-credentials = []
-test-util = []
+test-util = ["aws-smithy-runtime-api/test-util"]

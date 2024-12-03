@@ -2,6 +2,79 @@
 
 ## [Unreleased]
 
+## [v0.10.68] - 2024-10-16
+
+### Fixed
+
+* Fixed building on Rust 1.63.0 (our MSRV) with OpenSSL 3.2 or newer.
+
+## [v0.10.67] - 2024-10-15
+
+### Added
+
+* Added support for LibreSSL 4.0.x.
+* Added `argon2id`
+
+### Fixed
+
+* Fixed a case where `MdCtxRef::digest_verify_final` could leave an error on the stack.
+* Fixed a case where `RsaRef::check_key` could leave an errror on the stack.
+
+### Changed
+
+* `openssl` is now a 2021 edition crate
+* Explicitly specify the MSRV in `Cargo.toml`
+
+## [v0.10.66] - 2024-07-21
+
+### Fixed
+
+- Fixed undefined behavior in `MemBio::get_buf` when the resulting buffer had a length of 0.
+
+## [v0.10.65] - 2024-07-20
+
+### Fixed
+
+* Ensure we are initialized in `MessageDigest::from_nid`, `Md::from_nid`, `Md::fetch`
+
+### Changed
+
+* Expose `SslContextBuilder::set_keylog_callback` on BoringSSL
+
+## [v0.10.64] - 2024-02-19
+
+### Added
+
+* Added `PkeyCtxRef::{nonce_type, set_nonce_type}`.
+* Added `X509Ref::alias`.
+
+
+## [v0.10.63] - 2024-01-19
+
+### Added
+
+* Added `Pkcs7Ref::{type_,signed}`.
+* Added `Pkcs7SignedRef::certificates`.
+* Added `Cipher::{aes_256_xts,des_ede3_ecb,des_ede3_cfb8,des_ede3_ofb,camellia128_ofb,camellia192_ofb,camellia256_ofb,cast5_ofb,idea_ofb}`
+* Added `PKey::from_dhx`
+* Added `PKey::{public_key_from_pem_passphrase,public_key_from_pem_callback}`.
+
+### Changed
+
+* `Cipher::aes_128_ofb` is now available on BoringSSL
+* `Nid::{BRAINPOOL_P256R1,BRAINPOOL_P320R1,BRAINPOOL_P384R1,BRAINPOOL_P512R1}` are now available on LibreSSL.
+
+## [v0.10.62] - 2023-12-22
+
+### Added
+
+* Added `Nid::BRAINPOOL_P320R1`
+* Added `rand_priv_bytes`
+
+### Fixed
+
+* Fixed building on the latest version of BoringSSL
+
 ## [v0.10.61] - 2023-12-04
 
 ### Changed
@@ -858,7 +931,14 @@
 
 Look at the [release tags] for information about older releases.
 
-[Unreleased]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.61...master
+[Unreleased]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.68...master
+[v0.10.68]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.67...openssl-v0.10.68
+[v0.10.67]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.66...openssl-v0.10.67
+[v0.10.66]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.65...openssl-v0.10.66
+[v0.10.65]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.64...openssl-v0.10.65
+[v0.10.64]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.63...openssl-v0.10.64
+[v0.10.63]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.62...openssl-v0.10.63
+[v0.10.62]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.61...openssl-v0.10.62
 [v0.10.61]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.60...openssl-v0.10.61
 [v0.10.60]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.59...openssl-v0.10.60
 [v0.10.59]: https://github.com/sfackler/rust-openssl/compare/openssl-v0.10.58...openssl-v0.10.59

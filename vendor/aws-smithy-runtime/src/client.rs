@@ -10,6 +10,8 @@ pub mod defaults;
 
 pub mod dns;
 
+pub mod endpoint;
+
 /// Built-in Smithy HTTP clients and connectors.
 ///
 /// See the [module docs in `aws-smithy-runtime-api`](aws_smithy_runtime_api::client::http)
@@ -44,3 +46,8 @@ pub mod interceptors;
 
 /// Stalled stream protection for clients
 pub mod stalled_stream_protection;
+
+#[doc(hidden)]
+pub mod sdk_feature;
+/// Smithy support-code for code generated waiters.
+pub mod waiters;

@@ -19,6 +19,8 @@ use std::task::{Context, Poll};
 /// The name has a suffix `_x` to avoid name collision with a third-party `http-body-0-4`.
 #[cfg(feature = "http-body-0-4-x")]
 pub mod http_body_0_4_x;
+#[cfg(feature = "http-body-1-x")]
+pub mod http_body_1_x;
 
 /// A generic, boxed error that's `Send` and `Sync`
 pub type Error = Box<dyn StdError + Send + Sync>;
@@ -30,8 +32,6 @@ pin_project! {
     /// For handling responses, the type of the body will be controlled
     /// by the HTTP stack.
     ///
-    // TODO(naming): Consider renaming to simply `Body`, although I'm concerned about naming headaches
-    // between hyper::Body and our Body
     pub struct SdkBody {
         #[pin]
         inner: Inner,
@@ -55,8 +55,15 @@ impl Debug for SdkBody {
 
 /// A boxed generic HTTP body that, when consumed, will result in [`Bytes`] or an [`Error`].
 enum BoxBody {
-    #[cfg(feature = "http-body-0-4-x")]
-    HttpBody04(http_body_0_4::combinators::BoxBody<Bytes, Error>),
+    // This is enabled by the **dependency**, not the feature. This allows us to construct it
+    // whenever we have the dependency and keep the APIs private
+    #[cfg(any(
+        feature = "http-body-0-4-x",
+        feature = "http-body-1-x",
+        feature = "rt-tokio"
+    ))]
+    // will be dead code with `--no-default-features --features rt-tokio`
+    HttpBody04(#[allow(dead_code)] http_body_0_4::combinators::BoxBody<Bytes, Error>),
 }
 
 pin_project! {
@@ -162,10 +169,31 @@ impl SdkBody {
         }
     }
 
-    #[cfg(feature = "http-body-0-4-x")]
+    #[cfg(any(
+        feature = "http-body-0-4-x",
+        feature = "http-body-1-x",
+        feature = "rt-tokio"
+    ))]
+    pub(crate) fn from_body_0_4_internal<T, E>(body: T) -> Self
+    where
+        T: http_body_0_4::Body<Data = Bytes, Error = E> + Send + Sync + 'static,
+        E: Into<Error> + 'static,
+    {
+        Self {
+            inner: Inner::Dyn {
+                inner: BoxBody::HttpBody04(http_body_0_4::combinators::BoxBody::new(
+                    body.map_err(Into::into),
+                )),
+            },
+            rebuild: None,
+            bytes_contents: None,
+        }
+    }
+
+    #[cfg(any(feature = "http-body-0-4-x", feature = "http-body-1-x",))]
     pub(crate) fn poll_next_trailers(
         self: Pin<&mut Self>,
-        #[allow(unused)] cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<Option<http::HeaderMap<http::HeaderValue>>, Error>> {
         let this = self.project();
         match this.inner.project() {
@@ -204,6 +232,11 @@ impl SdkBody {
                 bytes_contents: self.bytes_contents.clone(),
             }
         })
+    }
+
+    /// Return `true` if this SdkBody is streaming, `false` if it is in-memory.
+    pub fn is_streaming(&self) -> bool {
+        matches!(self.inner, Inner::Dyn { .. })
     }
 
     /// Return the length, in bytes, of this SdkBody. If this returns `None`, then the body does not
@@ -349,10 +382,12 @@ mod test {
     async fn http_body_consumes_data() {
         let mut body = SdkBody::from("hello!");
         let mut body = Pin::new(&mut body);
+        assert!(!body.is_end_stream());
         let data = body.next().await;
         assert!(data.is_some());
         let data = body.next().await;
         assert!(data.is_none());
+        assert!(body.is_end_stream());
     }
 
     #[tokio::test]

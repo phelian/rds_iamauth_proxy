@@ -11,16 +11,15 @@
 
 [package]
 edition = "2018"
+rust-version = "1.65.0"
 name = "color-eyre"
-version = "0.6.2"
+version = "0.6.3"
 authors = ["Jane Lusby <jlusby@yaah.dev>"]
 description = "An error report handler for panics and eyre::Reports for colorful, consistent, and well formatted error reports for all kinds of errors."
 documentation = "https://docs.rs/color-eyre"
-readme = "README.md"
-keywords = []
-categories = []
+readme = "./README.md"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yaahc/color-eyre"
+repository = "https://github.com/eyre-rs/eyre"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -29,50 +28,48 @@ rustdoc-args = [
     "docsrs",
 ]
 
-[package.metadata.release]
-dev-version = false
-
 [[package.metadata.release.pre-release-replacements]]
 file = "CHANGELOG.md"
-search = "Unreleased"
 replace = "{{version}}"
+search = "Unreleased"
 
 [[package.metadata.release.pre-release-replacements]]
+exactly = 1
 file = "src/lib.rs"
-search = '#!\[doc\(html_root_url.*'
 replace = "#![doc(html_root_url = \"https://docs.rs/{{crate_name}}/{{version}}\")]"
-exactly = 1
+search = '#!\[doc\(html_root_url.*'
 
 [[package.metadata.release.pre-release-replacements]]
+exactly = 1
 file = "CHANGELOG.md"
-search = '\.\.\.HEAD'
 replace = "...{{tag_name}}"
-exactly = 1
+search = '\.\.\.HEAD'
 
 [[package.metadata.release.pre-release-replacements]]
 file = "CHANGELOG.md"
-search = "ReleaseDate"
 replace = "{{date}}"
+search = "ReleaseDate"
 
 [[package.metadata.release.pre-release-replacements]]
+exactly = 1
 file = "CHANGELOG.md"
-search = "<!-- next-header -->"
 replace = """
 <!-- next-header -->
 
 ## [Unreleased] - ReleaseDate"""
-exactly = 1
+search = "<!-- next-header -->"
 
 [[package.metadata.release.pre-release-replacements]]
+exactly = 1
 file = "CHANGELOG.md"
-search = "<!-- next-url -->"
 replace = """
 <!-- next-url -->
-[Unreleased]: https://github.com/yaahc/{{crate_name}}/compare/{{tag_name}}...HEAD"""
-exactly = 1
+[Unreleased]: https://github.com/eyre-rs/{{crate_name}}/compare/{{tag_name}}...HEAD"""
+search = "<!-- next-url -->"
 
-[profile.dev.package.backtrace]
-opt-level = 3
+[[example]]
+name = "color-eyre-usage"
+path = "examples/usage.rs"
 
 [dependencies.backtrace]
 version = "0.3.48"
@@ -89,7 +86,7 @@ version = "0.6.1"
 version = "0.3.0"
 
 [dependencies.once_cell]
-version = "1.4.0"
+version = "1.18.0"
 
 [dependencies.owo-colors]
 version = "3.2.0"

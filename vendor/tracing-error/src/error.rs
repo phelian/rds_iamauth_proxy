@@ -73,8 +73,8 @@ where
         // erased `ErrorImpl` back to its original type, which is needed in order to forward our
         // error/display/debug impls to the internal error type from the type erased error type.
         //
-        // The repr(C) is necessary to ensure that the struct is layed out in the order we
-        // specified it so that we can safely access the vtable and spantrace fields thru a type
+        // The repr(C) is necessary to ensure that the struct is laid out in the order we
+        // specified it, so that we can safely access the vtable and spantrace fields through a type
         // erased pointer to the original object.
         let vtable = &ErrorVTable {
             object_ref: object_ref::<E>,
@@ -109,7 +109,7 @@ impl ErrorImpl<Erased> {
         // uphold this is UB. since the `From` impl is parameterized over the original error type,
         // the function pointer we construct here will also retain the original type. therefore,
         // when this is consumed by the `error` method, it will be safe to call.
-        unsafe { &*(self.vtable.object_ref)(self) }
+        unsafe { (self.vtable.object_ref)(self) }
     }
 }
 

@@ -17,14 +17,14 @@ use bytes::BytesMut;
 mod bit_vec_06;
 #[cfg(feature = "with-chrono-0_4")]
 mod chrono_04;
-#[cfg(feature = "with-eui48-0_4")]
-mod eui48_04;
 #[cfg(feature = "with-eui48-1")]
 mod eui48_1;
 #[cfg(feature = "with-geo-types-0_6")]
 mod geo_types_06;
 #[cfg(feature = "with-geo-types-0_7")]
 mod geo_types_07;
+#[cfg(feature = "with-jiff-0_1")]
+mod jiff_01;
 #[cfg(feature = "with-serde_json-1")]
 mod serde_json_1;
 #[cfg(feature = "with-smol_str-01")]

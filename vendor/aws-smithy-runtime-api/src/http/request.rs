@@ -5,12 +5,10 @@
 
 //! Http Request Types
 
+use crate::http::extensions::Extensions;
 use crate::http::Headers;
 use crate::http::HttpError;
 use aws_smithy_types::body::SdkBody;
-use http as http0;
-use http0::uri::PathAndQuery;
-use http0::{Extensions, Method};
 use std::borrow::Cow;
 
 /// Parts struct useful for structural decomposition that the [`Request`] type can be converted into.
@@ -29,8 +27,8 @@ pub struct RequestParts<B = SdkBody> {
 pub struct Request<B = SdkBody> {
     body: B,
     uri: Uri,
-    method: Method,
-    extensions_02x: Extensions,
+    method: http_02x::Method,
+    extensions: Extensions,
     headers: Headers,
 }
 
@@ -38,7 +36,36 @@ pub struct Request<B = SdkBody> {
 #[derive(Debug, Clone)]
 pub struct Uri {
     as_string: String,
-    parsed: http0::Uri,
+    parsed: ParsedUri,
+}
+
+#[derive(Debug, Clone)]
+enum ParsedUri {
+    H0(http_02x::Uri),
+    H1(http_1x::Uri),
+}
+
+impl ParsedUri {
+    fn path_and_query(&self) -> &str {
+        match &self {
+            ParsedUri::H0(u) => u.path_and_query().map(|pq| pq.as_str()).unwrap_or(""),
+            ParsedUri::H1(u) => u.path_and_query().map(|pq| pq.as_str()).unwrap_or(""),
+        }
+    }
+
+    fn path(&self) -> &str {
+        match &self {
+            ParsedUri::H0(u) => u.path(),
+            ParsedUri::H1(u) => u.path(),
+        }
+    }
+
+    fn query(&self) -> Option<&str> {
+        match &self {
+            ParsedUri::H0(u) => u.query(),
+            ParsedUri::H1(u) => u.query(),
+        }
+    }
 }
 
 impl Uri {
@@ -49,22 +76,20 @@ impl Uri {
     ///
     /// An `endpoint` MUST NOT contain a query
     pub fn set_endpoint(&mut self, endpoint: &str) -> Result<(), HttpError> {
-        let endpoint: http0::Uri = endpoint.parse().map_err(HttpError::invalid_uri)?;
+        let endpoint: http_02x::Uri = endpoint.parse().map_err(HttpError::invalid_uri)?;
         let endpoint = endpoint.into_parts();
         let authority = endpoint
             .authority
-            .ok_or_else(|| HttpError::new("endpoint must contain authority"))?;
-        let scheme = endpoint
-            .scheme
-            .ok_or_else(|| HttpError::new("endpoint must have scheme"))?;
-        let new_uri = http0::Uri::builder()
+            .ok_or_else(HttpError::missing_authority)?;
+        let scheme = endpoint.scheme.ok_or_else(HttpError::missing_scheme)?;
+        let new_uri = http_02x::Uri::builder()
             .authority(authority)
             .scheme(scheme)
             .path_and_query(merge_paths(endpoint.path_and_query, &self.parsed).as_ref())
             .build()
-            .map_err(HttpError::new)?;
+            .map_err(HttpError::invalid_uri_parts)?;
         self.as_string = new_uri.to_string();
-        self.parsed = new_uri;
+        self.parsed = ParsedUri::H0(new_uri);
         Ok(())
     }
 
@@ -78,16 +103,35 @@ impl Uri {
         self.parsed.query()
     }
 
-    fn from_http0x_uri(uri: http0::Uri) -> Self {
+    fn from_http0x_uri(uri: http_02x::Uri) -> Self {
         Self {
             as_string: uri.to_string(),
-            parsed: uri,
+            parsed: ParsedUri::H0(uri),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn from_http1x_uri(uri: http_1x::Uri) -> Self {
+        Self {
+            as_string: uri.to_string(),
+            parsed: ParsedUri::H1(uri),
+        }
+    }
+
+    #[allow(dead_code)]
+    fn into_h0(self) -> http_02x::Uri {
+        match self.parsed {
+            ParsedUri::H0(uri) => uri,
+            ParsedUri::H1(_uri) => self.as_string.parse().unwrap(),
         }
     }
 }
 
-fn merge_paths(endpoint_path: Option<PathAndQuery>, uri: &http0::Uri) -> Cow<'_, str> {
-    let uri_path_and_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("");
+fn merge_paths(
+    endpoint_path: Option<http_02x::uri::PathAndQuery>,
+    uri: &ParsedUri,
+) -> Cow<'_, str> {
+    let uri_path_and_query = uri.path_and_query();
     let endpoint_path = match endpoint_path {
         None => return Cow::Borrowed(uri_path_and_query),
         Some(path) => path,
@@ -111,7 +155,7 @@ impl TryFrom<String> for Uri {
     type Error = HttpError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        let parsed = value.parse().map_err(HttpError::invalid_uri)?;
+        let parsed = ParsedUri::H0(value.parse().map_err(HttpError::invalid_uri)?);
         Ok(Uri {
             as_string: value,
             parsed,
@@ -127,18 +171,27 @@ impl<'a> TryFrom<&'a str> for Uri {
 }
 
 #[cfg(feature = "http-02x")]
-impl From<http0::Uri> for Uri {
-    fn from(value: http::Uri) -> Self {
+impl From<http_02x::Uri> for Uri {
+    fn from(value: http_02x::Uri) -> Self {
         Uri::from_http0x_uri(value)
     }
 }
 
 #[cfg(feature = "http-02x")]
-impl<B> TryInto<http0::Request<B>> for Request<B> {
+impl<B> TryInto<http_02x::Request<B>> for Request<B> {
     type Error = HttpError;
 
-    fn try_into(self) -> Result<http::Request<B>, Self::Error> {
+    fn try_into(self) -> Result<http_02x::Request<B>, Self::Error> {
         self.try_into_http02x()
+    }
+}
+
+#[cfg(feature = "http-1x")]
+impl<B> TryInto<http_1x::Request<B>> for Request<B> {
+    type Error = HttpError;
+
+    fn try_into(self) -> Result<http_1x::Request<B>, Self::Error> {
+        self.try_into_http1x()
     }
 }
 
@@ -148,22 +201,30 @@ impl<B> Request<B> {
     /// Depending on the internal storage type, this operation may be free or it may have an internal
     /// cost.
     #[cfg(feature = "http-02x")]
-    pub fn try_into_http02x(self) -> Result<http0::Request<B>, HttpError> {
-        let mut req = http::Request::builder()
-            .uri(self.uri.parsed)
+    pub fn try_into_http02x(self) -> Result<http_02x::Request<B>, HttpError> {
+        let mut req = http_02x::Request::builder()
+            .uri(self.uri.into_h0())
             .method(self.method)
             .body(self.body)
             .expect("known valid");
-        let mut headers = http0::HeaderMap::new();
-        headers.reserve(self.headers.headers.len());
-        headers.extend(
-            self.headers
-                .headers
-                .into_iter()
-                .map(|(k, v)| (k, v.into_http02x())),
-        );
-        *req.headers_mut() = headers;
-        *req.extensions_mut() = self.extensions_02x;
+        *req.headers_mut() = self.headers.http0_headermap();
+        *req.extensions_mut() = self.extensions.try_into()?;
+        Ok(req)
+    }
+
+    /// Converts this request into an http 1.x request.
+    ///
+    /// Depending on the internal storage type, this operation may be free or it may have an internal
+    /// cost.
+    #[cfg(feature = "http-1x")]
+    pub fn try_into_http1x(self) -> Result<http_1x::Request<B>, HttpError> {
+        let mut req = http_1x::Request::builder()
+            .uri(self.uri.as_string)
+            .method(self.method.as_str())
+            .body(self.body)
+            .expect("known valid");
+        *req.headers_mut() = self.headers.http1_headermap();
+        *req.extensions_mut() = self.extensions.try_into()?;
         Ok(req)
     }
 
@@ -173,7 +234,7 @@ impl<B> Request<B> {
             body: f(self.body),
             uri: self.uri,
             method: self.method,
-            extensions_02x: self.extensions_02x,
+            extensions: self.extensions,
             headers: self.headers,
         }
     }
@@ -182,9 +243,9 @@ impl<B> Request<B> {
     pub fn new(body: B) -> Self {
         Self {
             body,
-            uri: Uri::from_http0x_uri(http0::Uri::from_static("/")),
-            method: Method::GET,
-            extensions_02x: Default::default(),
+            uri: Uri::from_http0x_uri(http_02x::Uri::from_static("/")),
+            method: http_02x::Method::GET,
+            extensions: Default::default(),
             headers: Default::default(),
         }
     }
@@ -250,7 +311,7 @@ impl<B> Request<B> {
 
     /// Adds an extension to the request extensions
     pub fn add_extension<T: Send + Sync + Clone + 'static>(&mut self, extension: T) {
-        self.extensions_02x.insert(extension);
+        self.extensions.insert(extension.clone());
     }
 }
 
@@ -266,7 +327,7 @@ impl Request<SdkBody> {
             body,
             uri: self.uri.clone(),
             method: self.method.clone(),
-            extensions_02x: Extensions::new(),
+            extensions: Extensions::new(),
             headers: self.headers.clone(),
         })
     }
@@ -290,42 +351,51 @@ impl Request<SdkBody> {
 }
 
 #[cfg(feature = "http-02x")]
-impl<B> TryFrom<http0::Request<B>> for Request<B> {
+impl<B> TryFrom<http_02x::Request<B>> for Request<B> {
     type Error = HttpError;
 
-    fn try_from(value: http::Request<B>) -> Result<Self, Self::Error> {
+    fn try_from(value: http_02x::Request<B>) -> Result<Self, Self::Error> {
         let (parts, body) = value.into_parts();
         let headers = Headers::try_from(parts.headers)?;
-        // we need to do this eventually.
-        /*if !parts.extensions.is_empty() {
-            return Err(HttpError::new(
-                "Cannot convert non-empty extensions. Clear extensions before converting",
-            ));
-        }*/
         Ok(Self {
             body,
             uri: parts.uri.into(),
             method: parts.method,
-            extensions_02x: http::Extensions::new(),
+            extensions: parts.extensions.into(),
             headers,
         })
     }
 }
 
-#[cfg(all(test, feature = "http-02x"))]
+#[cfg(feature = "http-1x")]
+impl<B> TryFrom<http_1x::Request<B>> for Request<B> {
+    type Error = HttpError;
+
+    fn try_from(value: http_1x::Request<B>) -> Result<Self, Self::Error> {
+        let (parts, body) = value.into_parts();
+        let headers = Headers::try_from(parts.headers)?;
+        Ok(Self {
+            body,
+            uri: Uri::from_http1x_uri(parts.uri),
+            method: http_02x::Method::from_bytes(parts.method.as_str().as_bytes()).expect("valid"),
+            extensions: parts.extensions.into(),
+            headers,
+        })
+    }
+}
+
+#[cfg(all(test, feature = "http-02x", feature = "http-1x"))]
 mod test {
-    use super::*;
     use aws_smithy_types::body::SdkBody;
-    use http::header::{AUTHORIZATION, CONTENT_LENGTH};
-    use http::Uri;
+    use http_02x::header::{AUTHORIZATION, CONTENT_LENGTH};
 
     #[test]
     fn non_ascii_requests() {
-        let request = http::Request::builder()
+        let request = http_02x::Request::builder()
             .header("k", "😹")
             .body(SdkBody::empty())
             .unwrap();
-        let request: Request = request
+        let request: super::Request = request
             .try_into()
             .expect("failed to convert a non-string header");
         assert_eq!(request.headers().get("k"), Some("😹"))
@@ -333,7 +403,7 @@ mod test {
 
     #[test]
     fn request_can_be_created() {
-        let req = http::Request::builder()
+        let req = http_02x::Request::builder()
             .uri("http://foo.com")
             .body(SdkBody::from("hello"))
             .unwrap();
@@ -348,7 +418,7 @@ mod test {
 
     #[test]
     fn uri_mutations() {
-        let req = http::Request::builder()
+        let req = http_02x::Request::builder()
             .uri("http://foo.com")
             .body(SdkBody::from("hello"))
             .unwrap();
@@ -363,7 +433,7 @@ mod test {
     #[test]
     #[should_panic]
     fn header_panics() {
-        let req = http::Request::builder()
+        let req = http_02x::Request::builder()
             .uri("http://foo.com")
             .body(SdkBody::from("hello"))
             .unwrap();
@@ -377,13 +447,14 @@ mod test {
 
     #[test]
     fn try_clone_clones_all_data() {
-        let request = ::http::Request::builder()
-            .uri(Uri::from_static("https://www.amazon.com"))
+        let request = http_02x::Request::builder()
+            .uri(http_02x::Uri::from_static("https://www.amazon.com"))
             .method("POST")
             .header(CONTENT_LENGTH, 456)
             .header(AUTHORIZATION, "Token: hello")
             .body(SdkBody::from("hello world!"))
             .expect("valid request");
+
         let request: super::Request = request.try_into().unwrap();
         let cloned = request.try_clone().expect("request is cloneable");
 
@@ -393,5 +464,56 @@ mod test {
         assert_eq!("Token: hello", cloned.headers().get(AUTHORIZATION).unwrap(),);
         assert_eq!("456", cloned.headers().get(CONTENT_LENGTH).unwrap());
         assert_eq!("hello world!".as_bytes(), cloned.body().bytes().unwrap());
+    }
+
+    #[test]
+    fn valid_round_trips() {
+        let request = || {
+            http_02x::Request::builder()
+                .uri(http_02x::Uri::from_static("https://www.amazon.com"))
+                .method("POST")
+                .header(CONTENT_LENGTH, 456)
+                .header(AUTHORIZATION, "Token: hello")
+                .header("multi", "v1")
+                .header("multi", "v2")
+                .body(SdkBody::from("hello world!"))
+                .expect("valid request")
+        };
+
+        check_roundtrip(request);
+    }
+
+    macro_rules! req_eq {
+        ($a: expr, $b: expr) => {{
+            assert_eq!($a.uri(), $b.uri(), "status code mismatch");
+            assert_eq!($a.headers(), $b.headers(), "header mismatch");
+            assert_eq!($a.method(), $b.method(), "header mismatch");
+            assert_eq!($a.body().bytes(), $b.body().bytes(), "data mismatch");
+            assert_eq!(
+                $a.extensions().len(),
+                $b.extensions().len(),
+                "extensions size mismatch"
+            );
+        }};
+    }
+
+    #[track_caller]
+    fn check_roundtrip(req: impl Fn() -> http_02x::Request<SdkBody>) {
+        let mut container = super::Request::try_from(req()).unwrap();
+        container.add_extension(5_u32);
+        let mut h1 = container
+            .try_into_http1x()
+            .expect("failed converting to http1x");
+        assert_eq!(h1.extensions().get::<u32>(), Some(&5));
+        h1.extensions_mut().remove::<u32>();
+
+        let mut container = super::Request::try_from(h1).expect("failed converting from http1x");
+        container.add_extension(5_u32);
+        let mut h0 = container
+            .try_into_http02x()
+            .expect("failed converting back to http0x");
+        assert_eq!(h0.extensions().get::<u32>(), Some(&5));
+        h0.extensions_mut().remove::<u32>();
+        req_eq!(h0, req());
     }
 }

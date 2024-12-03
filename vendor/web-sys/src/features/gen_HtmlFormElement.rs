@@ -18,7 +18,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/acceptCharset)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn accept_charset(this: &HtmlFormElement) -> String;
+    pub fn accept_charset(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = acceptCharset)]
     #[doc = "Setter for the `acceptCharset` field of this object."]
     #[doc = ""]
@@ -32,7 +32,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/action)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn action(this: &HtmlFormElement) -> String;
+    pub fn action(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = action)]
     #[doc = "Setter for the `action` field of this object."]
     #[doc = ""]
@@ -46,7 +46,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/autocomplete)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn autocomplete(this: &HtmlFormElement) -> String;
+    pub fn autocomplete(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = autocomplete)]
     #[doc = "Setter for the `autocomplete` field of this object."]
     #[doc = ""]
@@ -60,7 +60,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/enctype)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn enctype(this: &HtmlFormElement) -> String;
+    pub fn enctype(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = enctype)]
     #[doc = "Setter for the `enctype` field of this object."]
     #[doc = ""]
@@ -74,7 +74,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/encoding)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn encoding(this: &HtmlFormElement) -> String;
+    pub fn encoding(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = encoding)]
     #[doc = "Setter for the `encoding` field of this object."]
     #[doc = ""]
@@ -88,7 +88,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/method)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn method(this: &HtmlFormElement) -> String;
+    pub fn method(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = method)]
     #[doc = "Setter for the `method` field of this object."]
     #[doc = ""]
@@ -102,7 +102,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/name)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn name(this: &HtmlFormElement) -> String;
+    pub fn name(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = name)]
     #[doc = "Setter for the `name` field of this object."]
     #[doc = ""]
@@ -130,7 +130,7 @@ extern "C" {
     #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/target)"]
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
-    pub fn target(this: &HtmlFormElement) -> String;
+    pub fn target(this: &HtmlFormElement) -> ::alloc::string::String;
     # [wasm_bindgen (structural , method , setter , js_class = "HTMLFormElement" , js_name = target)]
     #[doc = "Setter for the `target` field of this object."]
     #[doc = ""]
@@ -167,6 +167,23 @@ extern "C" {
     #[doc = ""]
     #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
     pub fn report_validity(this: &HtmlFormElement) -> bool;
+    # [wasm_bindgen (catch , method , structural , js_class = "HTMLFormElement" , js_name = requestSubmit)]
+    #[doc = "The `requestSubmit()` method."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/requestSubmit)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
+    pub fn request_submit(this: &HtmlFormElement) -> Result<(), JsValue>;
+    # [wasm_bindgen (catch , method , structural , js_class = "HTMLFormElement" , js_name = requestSubmit)]
+    #[doc = "The `requestSubmit()` method."]
+    #[doc = ""]
+    #[doc = "[MDN Documentation](https://developer.mozilla.org/en-US/docs/Web/API/HTMLFormElement/requestSubmit)"]
+    #[doc = ""]
+    #[doc = "*This API requires the following crate features to be activated: `HtmlFormElement`*"]
+    pub fn request_submit_with_submitter(
+        this: &HtmlFormElement,
+        submitter: Option<&HtmlElement>,
+    ) -> Result<(), JsValue>;
     # [wasm_bindgen (method , structural , js_class = "HTMLFormElement" , js_name = reset)]
     #[doc = "The `reset()` method."]
     #[doc = ""]

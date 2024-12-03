@@ -1,6 +1,8 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![allow(clippy::needless_range_loop)]
 #![warn(rust_2018_idioms)]
 #![cfg(feature = "full")]
+#![cfg(not(miri))]
 
 // Tests to run on both current-thread & multi-thread runtime variants.
 
@@ -111,8 +113,7 @@ rt_test! {
     use tokio_test::assert_err;
     use tokio_test::assert_ok;
 
-    use futures::future::poll_fn;
-    use std::future::Future;
+    use std::future::{poll_fn, Future};
     use std::pin::Pin;
 
     #[cfg(not(target_os="wasi"))]
@@ -695,7 +696,7 @@ rt_test! {
                 loop {
                     // Don't use Tokio's `yield_now()` to avoid special defer
                     // logic.
-                    futures::future::poll_fn::<(), _>(|cx| {
+                    std::future::poll_fn::<(), _>(|cx| {
                         cx.waker().wake_by_ref();
                         std::task::Poll::Pending
                     }).await;
@@ -784,9 +785,9 @@ rt_test! {
             barrier.wait();
 
             let (fail_test, fail_test_recv) = oneshot::channel::<()>();
-
+            let flag_clone = flag.clone();
             let jh = tokio::spawn(async move {
-                // Create a TCP litener
+                // Create a TCP listener
                 let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
                 let addr = listener.local_addr().unwrap();
 
@@ -797,7 +798,7 @@ rt_test! {
 
                         // Yield until connected
                         let mut cnt = 0;
-                        while !flag.load(SeqCst){
+                        while !flag_clone.load(SeqCst){
                             tokio::task::yield_now().await;
                             cnt += 1;
 
@@ -813,7 +814,7 @@ rt_test! {
                     },
                     async {
                         let _ = listener.accept().await.unwrap();
-                        flag.store(true, SeqCst);
+                        flag_clone.store(true, SeqCst);
                     }
                 );
             });
@@ -823,6 +824,11 @@ rt_test! {
             let success = fail_test_recv.await.is_err();
 
             if success {
+                // Setting flag to true ensures that the tasks we spawned at
+                // the beginning of the test will exit.
+                // If we don't do this, the test will hang since the runtime waits
+                // for all spawned tasks to finish when dropping.
+                flag.store(true, SeqCst);
                 // Check for panics in spawned task.
                 jh.abort();
                 jh.await.unwrap();
@@ -1089,7 +1095,7 @@ rt_test! {
         use std::thread;
 
         thread_local!(
-            static R: RefCell<Option<Runtime>> = RefCell::new(None);
+            static R: RefCell<Option<Runtime>> = const { RefCell::new(None) };
         );
 
         thread::spawn(|| {
@@ -1365,5 +1371,67 @@ rt_test! {
 
             th.join().unwrap();
         }
+    }
+
+    #[test]
+    #[cfg_attr(target_family = "wasm", ignore)]
+    fn wake_by_ref_from_thread_local() {
+        wake_from_thread_local(true);
+    }
+
+    #[test]
+    #[cfg_attr(target_family = "wasm", ignore)]
+    fn wake_by_val_from_thread_local() {
+        wake_from_thread_local(false);
+    }
+
+    fn wake_from_thread_local(by_ref: bool) {
+        use std::cell::RefCell;
+        use std::sync::mpsc::{channel, Sender};
+        use std::task::Waker;
+
+        struct TLData {
+            by_ref: bool,
+            waker: Option<Waker>,
+            done: Sender<bool>,
+        }
+
+        impl Drop for TLData {
+            fn drop(&mut self) {
+                if self.by_ref {
+                    self.waker.take().unwrap().wake_by_ref();
+                } else {
+                    self.waker.take().unwrap().wake();
+                }
+                let _ = self.done.send(true);
+            }
+        }
+
+        std::thread_local! {
+            static TL_DATA: RefCell<Option<TLData>> = const { RefCell::new(None) };
+        };
+
+        let (send, recv) = channel();
+
+        std::thread::spawn(move || {
+            let rt = rt();
+            rt.block_on(rt.spawn(poll_fn(move |cx| {
+                let waker = cx.waker().clone();
+                let send = send.clone();
+                TL_DATA.with(|tl| {
+                    tl.replace(Some(TLData {
+                        by_ref,
+                        waker: Some(waker),
+                        done: send,
+                    }));
+                });
+                Poll::Ready(())
+            })))
+            .unwrap();
+        })
+        .join()
+        .unwrap();
+
+        assert!(recv.recv().unwrap());
     }
 }

@@ -10,16 +10,15 @@ use crate::http_request::settings::UriPathNormalizationMode;
 use crate::http_request::sign::SignableRequest;
 use crate::http_request::uri_path_normalization::normalize_uri_path;
 use crate::http_request::url_escape::percent_encode_path;
-use crate::http_request::PercentEncodingMode;
 use crate::http_request::{PayloadChecksumKind, SignableBody, SignatureLocation, SigningParams};
+use crate::http_request::{PercentEncodingMode, SigningSettings};
 use crate::sign::v4::sha256_hex_string;
 use crate::SignatureVersion;
 use aws_smithy_http::query_writer::QueryWriter;
-use http::header::{AsHeaderName, HeaderName, HOST};
-use http::{HeaderMap, HeaderValue, Uri};
+use http0::header::{AsHeaderName, HeaderName, HOST};
+use http0::{HeaderMap, HeaderValue, Uri};
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
 use std::time::SystemTime;
@@ -218,7 +217,7 @@ impl<'a> CanonicalRequest<'a> {
         let creq = CanonicalRequest {
             method: req.method(),
             path,
-            params: Self::params(req.uri(), &values),
+            params: Self::params(req.uri(), &values, params.settings()),
             headers: canonical_headers,
             values,
         };
@@ -250,6 +249,11 @@ impl<'a> CanonicalRequest<'a> {
 
         Self::insert_host_header(&mut canonical_headers, req.uri());
 
+        let token_header_name = params
+            .settings()
+            .session_token_name_override
+            .unwrap_or(header::X_AMZ_SECURITY_TOKEN);
+
         if params.settings().signature_location == SignatureLocation::Headers {
             let creds = params
                 .credentials()
@@ -259,7 +263,7 @@ impl<'a> CanonicalRequest<'a> {
             if let Some(security_token) = creds.session_token() {
                 let mut sec_header = HeaderValue::from_str(security_token)?;
                 sec_header.set_sensitive(true);
-                canonical_headers.insert(header::X_AMZ_SECURITY_TOKEN, sec_header);
+                canonical_headers.insert(token_header_name, sec_header);
             }
 
             if params.settings().payload_checksum_kind == PayloadChecksumKind::XAmzSha256 {
@@ -283,7 +287,7 @@ impl<'a> CanonicalRequest<'a> {
             }
 
             if params.settings().session_token_mode == SessionTokenMode::Exclude
-                && name == HeaderName::from_static(header::X_AMZ_SECURITY_TOKEN)
+                && name == HeaderName::from_static(token_header_name)
             {
                 continue;
             }
@@ -320,7 +324,11 @@ impl<'a> CanonicalRequest<'a> {
         }
     }
 
-    fn params(uri: &Uri, values: &SignatureValues<'_>) -> Option<String> {
+    fn params(
+        uri: &Uri,
+        values: &SignatureValues<'_>,
+        settings: &SigningSettings,
+    ) -> Option<String> {
         let mut params: Vec<(Cow<'_, str>, Cow<'_, str>)> =
             form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes()).collect();
         fn add_param<'a>(params: &mut Vec<(Cow<'a, str>, Cow<'a, str>)>, k: &'a str, v: &'a str) {
@@ -345,7 +353,13 @@ impl<'a> CanonicalRequest<'a> {
             );
 
             if let Some(security_token) = values.security_token {
-                add_param(&mut params, param::X_AMZ_SECURITY_TOKEN, security_token);
+                add_param(
+                    &mut params,
+                    settings
+                        .session_token_name_override
+                        .unwrap_or(param::X_AMZ_SECURITY_TOKEN),
+                    security_token,
+                );
             }
         }
         // Sort by param name, and then by param value
@@ -425,39 +439,37 @@ impl<'a> fmt::Display for CanonicalRequest<'a> {
     }
 }
 
-/// A regex for matching on 2 or more spaces that acts on bytes.
-static MULTIPLE_SPACES: once_cell::sync::Lazy<regex::bytes::Regex> =
-    once_cell::sync::Lazy::new(|| regex::bytes::Regex::new(r" {2,}").unwrap());
-
 /// Removes excess spaces before and after a given byte string, and converts multiple sequential
 /// spaces to a single space e.g. "  Some  example   text  " -> "Some example text".
 ///
 /// This function ONLY affects spaces and not other kinds of whitespace.
-fn trim_all(text: &[u8]) -> Cow<'_, [u8]> {
-    // The normal trim function will trim non-breaking spaces and other various whitespace chars.
-    // S3 ONLY trims spaces so we use trim_matches to trim spaces only
-    let text = trim_spaces_from_byte_string(text);
-    MULTIPLE_SPACES.replace_all(text, " ".as_bytes())
-}
-
-/// Removes excess spaces before and after a given byte string by returning a subset of those bytes.
-/// Will return an empty slice if a string is composed entirely of whitespace.
-fn trim_spaces_from_byte_string(bytes: &[u8]) -> &[u8] {
-    let starting_index = bytes.iter().position(|b| *b != b' ').unwrap_or(0);
-    let ending_offset = bytes.iter().rev().position(|b| *b != b' ').unwrap_or(0);
-    let ending_index = bytes.len() - ending_offset;
-    &bytes[starting_index..ending_index]
+fn trim_all(text: &str) -> Cow<'_, str> {
+    let text = text.trim_matches(' ');
+    let requires_filter = text
+        .chars()
+        .zip(text.chars().skip(1))
+        .any(|(a, b)| a == ' ' && b == ' ');
+    if !requires_filter {
+        Cow::Borrowed(text)
+    } else {
+        // The normal trim function will trim non-breaking spaces and other various whitespace chars.
+        // S3 ONLY trims spaces so we use trim_matches to trim spaces only
+        Cow::Owned(
+            text.chars()
+                // Filter out consecutive spaces
+                .zip(text.chars().skip(1).chain(std::iter::once('!')))
+                .filter(|(a, b)| *a != ' ' || *b != ' ')
+                .map(|(a, _)| a)
+                .collect(),
+        )
+    }
 }
 
 /// Works just like [trim_all] but acts on HeaderValues instead of bytes.
 /// Will ensure that the underlying bytes are valid UTF-8.
 fn normalize_header_value(header_value: &str) -> Result<HeaderValue, CanonicalRequestError> {
-    let trimmed_value = trim_all(header_value.as_bytes());
-    HeaderValue::from_str(
-        std::str::from_utf8(&trimmed_value)
-            .map_err(CanonicalRequestError::invalid_utf8_in_header_value)?,
-    )
-    .map_err(CanonicalRequestError::from)
+    let trimmed_value = trim_all(header_value);
+    HeaderValue::from_str(&trimmed_value).map_err(CanonicalRequestError::from)
 }
 
 #[derive(Debug, PartialEq, Default)]
@@ -628,9 +640,10 @@ mod tests {
     use aws_credential_types::Credentials;
     use aws_smithy_http::query_writer::QueryWriter;
     use aws_smithy_runtime_api::client::identity::Identity;
-    use http::{HeaderValue, Uri};
+    use http0::{HeaderValue, Uri};
     use pretty_assertions::assert_eq;
     use proptest::{prelude::*, proptest};
+    use std::borrow::Cow;
     use std::time::Duration;
 
     fn signing_params(identity: &Identity, settings: SigningSettings) -> SigningParams<'_> {
@@ -795,7 +808,7 @@ mod tests {
 
     #[test]
     fn test_tilde_in_uri() {
-        let req = http::Request::builder()
+        let req = http0::Request::builder()
             .uri("https://s3.us-east-1.amazonaws.com/my-bucket?list-type=2&prefix=~objprefix&single&k=&unreserved=-_.~").body("").unwrap().into();
         let req = SignableRequest::from(&req);
         let identity = Credentials::for_tests().into();
@@ -816,7 +829,7 @@ mod tests {
         query_writer.insert("list-type", "2");
         query_writer.insert("prefix", &all_printable_ascii_chars);
 
-        let req = http::Request::builder()
+        let req = http0::Request::builder()
             .uri(query_writer.build_uri())
             .body("")
             .unwrap()
@@ -864,7 +877,7 @@ mod tests {
     // It should exclude authorization, user-agent, x-amzn-trace-id headers from presigning
     #[test]
     fn non_presigning_header_exclusion() {
-        let request = http::Request::builder()
+        let request = http0::Request::builder()
             .uri("https://some-endpoint.some-region.amazonaws.com")
             .header("authorization", "test-authorization")
             .header("content-type", "application/xml")
@@ -896,7 +909,7 @@ mod tests {
     // It should exclude authorization, user-agent, x-amz-user-agent, x-amzn-trace-id headers from presigning
     #[test]
     fn presigning_header_exclusion() {
-        let request = http::Request::builder()
+        let request = http0::Request::builder()
             .uri("https://some-endpoint.some-region.amazonaws.com")
             .header("authorization", "test-authorization")
             .header("content-type", "application/xml")
@@ -945,7 +958,7 @@ mod tests {
                 valid_input,
             )
         ) {
-            let mut request_builder = http::Request::builder()
+            let mut request_builder = http0::Request::builder()
                 .uri("https://some-endpoint.some-region.amazonaws.com")
                 .header("content-type", "application/xml")
                 .header("content-length", "0");
@@ -982,32 +995,34 @@ mod tests {
 
     #[test]
     fn test_trim_all_handles_spaces_correctly() {
-        // Can't compare a byte array to a Cow so we convert both to slices before comparing
-        let expected = &b"Some example text"[..];
-        let actual = &trim_all(b"  Some  example   text  ")[..];
-
-        assert_eq!(expected, actual);
+        assert_eq!(Cow::Borrowed("don't touch me"), trim_all("don't touch me"));
+        assert_eq!("trim left", trim_all("   trim left"));
+        assert_eq!("trim right", trim_all("trim right "));
+        assert_eq!("trim both", trim_all("   trim both  "));
+        assert_eq!("", trim_all(" "));
+        assert_eq!("", trim_all("  "));
+        assert_eq!("a b", trim_all(" a   b "));
+        assert_eq!("Some example text", trim_all("  Some  example   text  "));
     }
 
     #[test]
     fn test_trim_all_ignores_other_forms_of_whitespace() {
-        // Can't compare a byte array to a Cow so we convert both to slices before comparing
-        let expected = &b"\t\xA0Some\xA0 example \xA0text\xA0\n"[..];
         // \xA0 is a non-breaking space character
-        let actual = &trim_all(b"\t\xA0Some\xA0     example   \xA0text\xA0\n")[..];
-
-        assert_eq!(expected, actual);
+        assert_eq!(
+            "\t\u{A0}Some\u{A0} example \u{A0}text\u{A0}\n",
+            trim_all("\t\u{A0}Some\u{A0}     example   \u{A0}text\u{A0}\n")
+        );
     }
 
     #[test]
     fn trim_spaces_works_on_single_characters() {
-        assert_eq!(trim_all(b"2").as_ref(), b"2");
+        assert_eq!(trim_all("2").as_ref(), "2");
     }
 
     proptest! {
         #[test]
         fn test_trim_all_doesnt_elongate_strings(s in ".*") {
-            assert!(trim_all(s.as_bytes()).len() <= s.len())
+            assert!(trim_all(&s).len() <= s.len())
         }
 
         #[test]
@@ -1018,7 +1033,7 @@ mod tests {
 
         #[test]
         fn test_trim_all_does_nothing_when_there_are_no_spaces(s in "[^ ]*") {
-            assert_eq!(trim_all(s.as_bytes()).as_ref(), s.as_bytes());
+            assert_eq!(trim_all(&s).as_ref(), s);
         }
     }
 }

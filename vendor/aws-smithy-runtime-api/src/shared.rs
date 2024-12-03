@@ -5,7 +5,7 @@
 
 //! Conversion traits for converting an unshared type into a shared type.
 //!
-//! The standard [`From`](std::convert::From)/[`Into`](std::convert::Into) traits can't be
+//! The standard [`From`]/[`Into`] traits can't be
 //! used for this purpose due to the blanket implementation of `Into`.
 //!
 //! This implementation also adds a [`maybe_shared`] method and [`impl_shared_conversions`](crate::impl_shared_conversions)
@@ -202,7 +202,7 @@ mod tests {
     impl Thing for Thingamajig {}
 
     #[derive(Debug)]
-    struct SharedThing(Arc<dyn Thing>);
+    struct SharedThing(#[allow(dead_code)] Arc<dyn Thing>);
     impl Thing for SharedThing {}
     impl SharedThing {
         fn new(thing: impl Thing + 'static) -> Self {

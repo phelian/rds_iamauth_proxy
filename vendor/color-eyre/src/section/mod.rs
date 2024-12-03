@@ -166,6 +166,8 @@ pub trait Section: crate::private::Sealed {
     /// ```rust
     /// use color_eyre::{eyre::eyre, eyre::Report, Section, SectionExt};
     ///
+    /// # #[cfg(not(miri))]
+    /// # {
     /// let output = std::process::Command::new("ls")
     ///     .output()?;
     ///
@@ -178,6 +180,7 @@ pub trait Section: crate::private::Sealed {
     /// };
     ///
     /// println!("{}", output);
+    /// # }
     /// # Ok::<_, Report>(())
     /// ```
     fn with_section<D, F>(self, section: F) -> Self::Return
@@ -315,6 +318,12 @@ pub trait Section: crate::private::Sealed {
     where
         D: Display + Send + Sync + 'static,
         F: FnOnce() -> D;
+
+    /// Whether to suppress printing of collected backtrace (if any).
+    ///
+    /// Useful for reporting "unexceptional" errors for which a backtrace
+    /// isn't really necessary.
+    fn suppress_backtrace(self, suppress: bool) -> Self::Return;
 }
 
 /// Trait for printing a panic error message for the given PanicInfo

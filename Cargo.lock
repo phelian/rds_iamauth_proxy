@@ -1679,6 +1679,7 @@ dependencies = [
  "postgres-protocol",
  "serde",
  "serde_derive",
+ "time",
  "tokio",
  "tokio-postgres",
  "tokio-stream",

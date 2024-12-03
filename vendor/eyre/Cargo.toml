@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.65.0"
 name = "eyre"
-version = "0.6.9"
+version = "0.6.12"
 authors = [
     "David Tolnay <dtolnay@gmail.com>",
     "Jane Lusby <jlusby42@gmail.com>",

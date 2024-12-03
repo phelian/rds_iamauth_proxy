@@ -5,17 +5,53 @@ use crate::span::MemberSpan;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned, ToTokens};
 use std::collections::BTreeSet as Set;
-use syn::{
-    Data, DeriveInput, GenericArgument, Member, PathArguments, Result, Token, Type, Visibility,
-};
+use syn::{DeriveInput, GenericArgument, Member, PathArguments, Result, Token, Type};
 
-pub fn derive(node: &DeriveInput) -> Result<TokenStream> {
-    let input = Input::from_syn(node)?;
+pub fn derive(input: &DeriveInput) -> TokenStream {
+    match try_expand(input) {
+        Ok(expanded) => expanded,
+        // If there are invalid attributes in the input, expand to an Error impl
+        // anyway to minimize spurious knock-on errors in other code that uses
+        // this type as an Error.
+        Err(error) => fallback(input, error),
+    }
+}
+
+fn try_expand(input: &DeriveInput) -> Result<TokenStream> {
+    let input = Input::from_syn(input)?;
     input.validate()?;
     Ok(match input {
         Input::Struct(input) => impl_struct(input),
         Input::Enum(input) => impl_enum(input),
     })
+}
+
+fn fallback(input: &DeriveInput, error: syn::Error) -> TokenStream {
+    let ty = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let error = error.to_compile_error();
+
+    quote! {
+        #error
+
+        #[allow(unused_qualifications)]
+        #[automatically_derived]
+        impl #impl_generics std::error::Error for #ty #ty_generics #where_clause
+        where
+            // Work around trivial bounds being unstable.
+            // https://github.com/rust-lang/rust/issues/48214
+            for<'workaround> #ty #ty_generics: ::core::fmt::Debug,
+        {}
+
+        #[allow(unused_qualifications)]
+        #[automatically_derived]
+        impl #impl_generics ::core::fmt::Display for #ty #ty_generics #where_clause {
+            fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                ::core::unreachable!()
+            }
+        }
+    }
 }
 
 fn impl_struct(input: Struct) -> TokenStream {
@@ -55,7 +91,7 @@ fn impl_struct(input: Struct) -> TokenStream {
     let source_method = source_body.map(|body| {
         quote! {
             fn source(&self) -> ::core::option::Option<&(dyn std::error::Error + 'static)> {
-                use thiserror::__private::AsDynError;
+                use thiserror::__private::AsDynError as _;
                 #body
             }
         }
@@ -91,7 +127,7 @@ fn impl_struct(input: Struct) -> TokenStream {
                 })
             };
             quote! {
-                use thiserror::__private::ThiserrorProvide;
+                use thiserror::__private::ThiserrorProvide as _;
                 #source_provide
                 #self_provide
             }
@@ -121,7 +157,7 @@ fn impl_struct(input: Struct) -> TokenStream {
             ::core::fmt::Display::fmt(&self.#only_field, __formatter)
         })
     } else if let Some(display) = &input.attrs.display {
-        display_implied_bounds = display.implied_bounds.clone();
+        display_implied_bounds.clone_from(&display.implied_bounds);
         let use_as_display = use_as_display(display.has_bonus_display);
         let pat = fields_pat(&input.fields);
         Some(quote! {
@@ -144,6 +180,7 @@ fn impl_struct(input: Struct) -> TokenStream {
         let display_where_clause = display_inferred_bounds.augment_where_clause(input.generics);
         quote! {
             #[allow(unused_qualifications)]
+            #[automatically_derived]
             impl #impl_generics ::core::fmt::Display for #ty #ty_generics #display_where_clause {
                 #[allow(clippy::used_underscore_binding)]
                 fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
@@ -159,6 +196,7 @@ fn impl_struct(input: Struct) -> TokenStream {
         let body = from_initializer(from_field, backtrace_field);
         quote! {
             #[allow(unused_qualifications)]
+            #[automatically_derived]
             impl #impl_generics ::core::convert::From<#from> for #ty #ty_generics #where_clause {
                 #[allow(deprecated)]
                 fn from(source: #from) -> Self {
@@ -168,7 +206,6 @@ fn impl_struct(input: Struct) -> TokenStream {
         }
     });
 
-    let error_trait = spanned_error_trait(input.original);
     if input.generics.type_params().next().is_some() {
         let self_token = <Token![Self]>::default();
         error_inferred_bounds.insert(self_token, Trait::Debug);
@@ -178,7 +215,8 @@ fn impl_struct(input: Struct) -> TokenStream {
 
     quote! {
         #[allow(unused_qualifications)]
-        impl #impl_generics #error_trait for #ty #ty_generics #error_where_clause {
+        #[automatically_derived]
+        impl #impl_generics std::error::Error for #ty #ty_generics #error_where_clause {
             #source_method
             #provide_method
         }
@@ -233,7 +271,7 @@ fn impl_enum(input: Enum) -> TokenStream {
         });
         Some(quote! {
             fn source(&self) -> ::core::option::Option<&(dyn std::error::Error + 'static)> {
-                use thiserror::__private::AsDynError;
+                use thiserror::__private::AsDynError as _;
                 #[allow(deprecated)]
                 match self {
                     #(#arms)*
@@ -283,7 +321,7 @@ fn impl_enum(input: Enum) -> TokenStream {
                             #source: #varsource,
                             ..
                         } => {
-                            use thiserror::__private::ThiserrorProvide;
+                            use thiserror::__private::ThiserrorProvide as _;
                             #source_provide
                             #self_provide
                         }
@@ -307,7 +345,7 @@ fn impl_enum(input: Enum) -> TokenStream {
                     };
                     quote! {
                         #ty::#ident {#backtrace: #varsource, ..} => {
-                            use thiserror::__private::ThiserrorProvide;
+                            use thiserror::__private::ThiserrorProvide as _;
                             #source_provide
                         }
                     }
@@ -366,7 +404,7 @@ fn impl_enum(input: Enum) -> TokenStream {
             let mut display_implied_bounds = Set::new();
             let display = match &variant.attrs.display {
                 Some(display) => {
-                    display_implied_bounds = display.implied_bounds.clone();
+                    display_implied_bounds.clone_from(&display.implied_bounds);
                     display.to_token_stream()
                 }
                 None => {
@@ -394,6 +432,7 @@ fn impl_enum(input: Enum) -> TokenStream {
         let display_where_clause = display_inferred_bounds.augment_where_clause(input.generics);
         Some(quote! {
             #[allow(unused_qualifications)]
+            #[automatically_derived]
             impl #impl_generics ::core::fmt::Display for #ty #ty_generics #display_where_clause {
                 fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                     #use_as_display
@@ -416,6 +455,7 @@ fn impl_enum(input: Enum) -> TokenStream {
         let body = from_initializer(from_field, backtrace_field);
         Some(quote! {
             #[allow(unused_qualifications)]
+            #[automatically_derived]
             impl #impl_generics ::core::convert::From<#from> for #ty #ty_generics #where_clause {
                 #[allow(deprecated)]
                 fn from(source: #from) -> Self {
@@ -425,7 +465,6 @@ fn impl_enum(input: Enum) -> TokenStream {
         })
     });
 
-    let error_trait = spanned_error_trait(input.original);
     if input.generics.type_params().next().is_some() {
         let self_token = <Token![Self]>::default();
         error_inferred_bounds.insert(self_token, Trait::Debug);
@@ -435,7 +474,8 @@ fn impl_enum(input: Enum) -> TokenStream {
 
     quote! {
         #[allow(unused_qualifications)]
-        impl #impl_generics #error_trait for #ty #ty_generics #error_where_clause {
+        #[automatically_derived]
+        impl #impl_generics std::error::Error for #ty #ty_generics #error_where_clause {
             #source_method
             #provide_method
         }
@@ -527,22 +567,4 @@ fn type_parameter_of_option(ty: &Type) -> Option<&Type> {
         GenericArgument::Type(arg) => Some(arg),
         _ => None,
     }
-}
-
-fn spanned_error_trait(input: &DeriveInput) -> TokenStream {
-    let vis_span = match &input.vis {
-        Visibility::Public(vis) => Some(vis.span),
-        Visibility::Restricted(vis) => Some(vis.pub_token.span),
-        Visibility::Inherited => None,
-    };
-    let data_span = match &input.data {
-        Data::Struct(data) => data.struct_token.span,
-        Data::Enum(data) => data.enum_token.span,
-        Data::Union(data) => data.union_token.span,
-    };
-    let first_span = vis_span.unwrap_or(data_span);
-    let last_span = input.ident.span();
-    let path = quote_spanned!(first_span=> std::error::);
-    let error = quote_spanned!(last_span=> Error);
-    quote!(#path #error)
 }

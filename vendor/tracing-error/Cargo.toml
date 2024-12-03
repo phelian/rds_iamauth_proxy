@@ -11,31 +11,66 @@
 
 [package]
 edition = "2018"
+rust-version = "1.63.0"
 name = "tracing-error"
-version = "0.2.0"
-authors = ["Eliza Weisman <eliza@buoyant.io>", "Jane Lusby <jlusby@yaah.dev>", "Tokio Contributors <team@tokio.rs>"]
-description = "Utilities for enriching errors with `tracing`.\n"
+version = "0.2.1"
+authors = [
+    "Eliza Weisman <eliza@buoyant.io>",
+    "Jane Lusby <jlusby@yaah.dev>",
+    "Tokio Contributors <team@tokio.rs>",
+]
+build = false
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+description = """
+Utilities for enriching errors with `tracing`.
+"""
 homepage = "https://tokio.rs"
 readme = "README.md"
-keywords = ["tracing", "error-handling", "exception-reporting", "backtrace"]
-categories = ["development-tools::debugging", "rust-patterns"]
+keywords = [
+    "tracing",
+    "error-handling",
+    "exception-reporting",
+    "backtrace",
+]
+categories = [
+    "development-tools::debugging",
+    "rust-patterns",
+]
 license = "MIT"
 repository = "https://github.com/tokio-rs/tracing"
+resolver = "2"
+
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+rustdoc-args = [
+    "--cfg",
+    "docsrs",
+]
+
+[lib]
+name = "tracing_error"
+path = "src/lib.rs"
+
 [dependencies.tracing]
-version = "0.1.12"
+version = "0.1.35"
 features = ["std"]
 default-features = false
 
 [dependencies.tracing-subscriber]
-version = "0.3"
-features = ["registry", "fmt"]
+version = "0.3.0"
+features = [
+    "registry",
+    "fmt",
+]
 default-features = false
 
 [features]
 default = ["traced-error"]
 traced-error = []
+
 [badges.maintenance]
 status = "experimental"

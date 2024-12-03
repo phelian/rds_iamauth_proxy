@@ -7,12 +7,14 @@
 
 //! AWS Shared Config
 //!
-//! This module contains an shared configuration representation that is agnostic from a specific service.
+//! This module contains a shared configuration representation that is agnostic from a specific service.
 
 use crate::app_name::AppName;
 use crate::docs_for;
+use crate::origin::Origin;
 use crate::region::Region;
-
+use crate::service_config::LoadServiceConfig;
+use aws_credential_types::provider::token::SharedTokenProvider;
 pub use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_smithy_async::rt::sleep::AsyncSleep;
 pub use aws_smithy_async::rt::sleep::SharedAsyncSleep;
@@ -25,6 +27,8 @@ pub use aws_smithy_runtime_api::client::stalled_stream_protection::StalledStream
 use aws_smithy_runtime_api::shared::IntoShared;
 pub use aws_smithy_types::retry::RetryConfig;
 pub use aws_smithy_types::timeout::TimeoutConfig;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Unified docstrings to keep crates in sync. Not intended for public use
 pub mod unified_docs {
@@ -44,8 +48,25 @@ If no dual-stack endpoint is available the request MAY return an error.
 **Note**: Some services do not offer dual-stack as a configurable parameter (e.g. Code Catalyst). For
 these services, this setting has no effect"
         };
+        (time_source) => {
+"The time source use to use for this client.
 
-        (time_source) => { "The time source use to use for this client. This only needs to be required for creating deterministic tests or platforms where `SystemTime::now()` is not supported." };
+This only needs to be required for creating deterministic tests or platforms where `SystemTime::now()` is not supported."};
+        (disable_request_compression) => {
+"When `true`, disable request compression. Defaults to `false`.
+
+**Only some services support request compression.** For services
+that don't support request compression, this setting does nothing.
+" };
+        (request_min_compression_size_bytes) => {
+"The minimum size of request that should be compressed. Defaults to `10240` bytes.
+
+When a request body's size is lower than this, request compression will be skipped.
+This is useful for request bodies because, for small request bodies, compression may actually increase their size.
+
+**Only some services support request compression.** For services
+that don't support request compression, this setting does nothing.
+" };
     }
 }
 
@@ -55,6 +76,7 @@ pub struct SdkConfig {
     app_name: Option<AppName>,
     identity_cache: Option<SharedIdentityCache>,
     credentials_provider: Option<SharedCredentialsProvider>,
+    token_provider: Option<SharedTokenProvider>,
     region: Option<Region>,
     endpoint_url: Option<String>,
     retry_config: Option<RetryConfig>,
@@ -66,6 +88,10 @@ pub struct SdkConfig {
     use_fips: Option<bool>,
     use_dual_stack: Option<bool>,
     behavior_version: Option<BehaviorVersion>,
+    service_config: Option<Arc<dyn LoadServiceConfig>>,
+    config_origins: HashMap<&'static str, Origin>,
+    disable_request_compression: Option<bool>,
+    request_min_compression_size_bytes: Option<u32>,
 }
 
 /// Builder for AWS Shared Configuration
@@ -78,6 +104,7 @@ pub struct Builder {
     app_name: Option<AppName>,
     identity_cache: Option<SharedIdentityCache>,
     credentials_provider: Option<SharedCredentialsProvider>,
+    token_provider: Option<SharedTokenProvider>,
     region: Option<Region>,
     endpoint_url: Option<String>,
     retry_config: Option<RetryConfig>,
@@ -89,6 +116,10 @@ pub struct Builder {
     use_fips: Option<bool>,
     use_dual_stack: Option<bool>,
     behavior_version: Option<BehaviorVersion>,
+    service_config: Option<Arc<dyn LoadServiceConfig>>,
+    config_origins: HashMap<&'static str, Origin>,
+    disable_request_compression: Option<bool>,
+    request_min_compression_size_bytes: Option<u32>,
 }
 
 impl Builder {
@@ -415,6 +446,55 @@ impl Builder {
         self
     }
 
+    /// Set the bearer auth token provider for the builder
+    ///
+    /// # Examples
+    /// ```rust
+    /// use aws_credential_types::provider::token::{ProvideToken, SharedTokenProvider};
+    /// use aws_types::SdkConfig;
+    ///
+    /// fn make_provider() -> impl ProvideToken {
+    ///   // ...
+    ///   # aws_credential_types::Token::new("example", None)
+    /// }
+    ///
+    /// let config = SdkConfig::builder()
+    ///     .token_provider(SharedTokenProvider::new(make_provider()))
+    ///     .build();
+    /// ```
+    pub fn token_provider(mut self, provider: SharedTokenProvider) -> Self {
+        self.set_token_provider(Some(provider));
+        self
+    }
+
+    /// Set the bearer auth token provider for the builder
+    ///
+    /// # Examples
+    /// ```rust
+    /// use aws_credential_types::provider::token::{ProvideToken, SharedTokenProvider};
+    /// use aws_types::SdkConfig;
+    ///
+    /// fn make_provider() -> impl ProvideToken {
+    ///   // ...
+    ///   # aws_credential_types::Token::new("example", None)
+    /// }
+    ///
+    /// fn override_provider() -> bool {
+    ///   // ...
+    ///   # true
+    /// }
+    ///
+    /// let mut builder = SdkConfig::builder();
+    /// if override_provider() {
+    ///     builder.set_token_provider(Some(SharedTokenProvider::new(make_provider())));
+    /// }
+    /// let config = builder.build();
+    /// ```
+    pub fn set_token_provider(&mut self, provider: Option<SharedTokenProvider>) -> &mut Self {
+        self.token_provider = provider;
+        self
+    }
+
     /// Sets the name of the app that is using the client.
     ///
     /// This _optional_ name is used to identify the application in the user agent that
@@ -542,6 +622,39 @@ impl Builder {
         self
     }
 
+    #[doc = docs_for!(disable_request_compression)]
+    pub fn disable_request_compression(mut self, disable_request_compression: bool) -> Self {
+        self.set_disable_request_compression(Some(disable_request_compression));
+        self
+    }
+
+    #[doc = docs_for!(disable_request_compression)]
+    pub fn set_disable_request_compression(
+        &mut self,
+        disable_request_compression: Option<bool>,
+    ) -> &mut Self {
+        self.disable_request_compression = disable_request_compression;
+        self
+    }
+
+    #[doc = docs_for!(request_min_compression_size_bytes)]
+    pub fn request_min_compression_size_bytes(
+        mut self,
+        request_min_compression_size_bytes: u32,
+    ) -> Self {
+        self.set_request_min_compression_size_bytes(Some(request_min_compression_size_bytes));
+        self
+    }
+
+    #[doc = docs_for!(request_min_compression_size_bytes)]
+    pub fn set_request_min_compression_size_bytes(
+        &mut self,
+        request_min_compression_size_bytes: Option<u32>,
+    ) -> &mut Self {
+        self.request_min_compression_size_bytes = request_min_compression_size_bytes;
+        self
+    }
+
     /// Sets the [`BehaviorVersion`] for the [`SdkConfig`]
     pub fn behavior_version(mut self, behavior_version: BehaviorVersion) -> Self {
         self.set_behavior_version(Some(behavior_version));
@@ -554,12 +667,44 @@ impl Builder {
         self
     }
 
-    /// Build a [`SdkConfig`](SdkConfig) from this builder
+    /// Sets the service config provider for the [`SdkConfig`].
+    ///
+    /// This provider is used when creating a service-specific config from an
+    /// `SdkConfig` and provides access to config defined in the environment
+    /// which would otherwise be inaccessible.
+    pub fn service_config(mut self, service_config: impl LoadServiceConfig + 'static) -> Self {
+        self.set_service_config(Some(service_config));
+        self
+    }
+
+    /// Sets the service config provider for the [`SdkConfig`].
+    ///
+    /// This provider is used when creating a service-specific config from an
+    /// `SdkConfig` and provides access to config defined in the environment
+    /// which would otherwise be inaccessible.
+    pub fn set_service_config(
+        &mut self,
+        service_config: Option<impl LoadServiceConfig + 'static>,
+    ) -> &mut Self {
+        self.service_config = service_config.map(|it| Arc::new(it) as Arc<dyn LoadServiceConfig>);
+        self
+    }
+
+    /// Set the origin of a setting.
+    ///
+    /// This is used internally to understand how to merge config structs while
+    /// respecting precedence of origins.
+    pub fn insert_origin(&mut self, setting: &'static str, origin: Origin) {
+        self.config_origins.insert(setting, origin);
+    }
+
+    /// Build a [`SdkConfig`] from this builder.
     pub fn build(self) -> SdkConfig {
         SdkConfig {
             app_name: self.app_name,
             identity_cache: self.identity_cache,
             credentials_provider: self.credentials_provider,
+            token_provider: self.token_provider,
             region: self.region,
             endpoint_url: self.endpoint_url,
             retry_config: self.retry_config,
@@ -571,6 +716,10 @@ impl Builder {
             time_source: self.time_source,
             behavior_version: self.behavior_version,
             stalled_stream_protection_config: self.stalled_stream_protection_config,
+            service_config: self.service_config,
+            config_origins: self.config_origins,
+            disable_request_compression: self.disable_request_compression,
+            request_min_compression_size_bytes: self.request_min_compression_size_bytes,
         }
     }
 }
@@ -682,6 +831,11 @@ impl SdkConfig {
         self.credentials_provider.clone()
     }
 
+    /// Configured bearer auth token provider
+    pub fn token_provider(&self) -> Option<SharedTokenProvider> {
+        self.token_provider.clone()
+    }
+
     /// Configured time source
     pub fn time_source(&self) -> Option<SharedTimeSource> {
         self.time_source.clone()
@@ -707,14 +861,29 @@ impl SdkConfig {
         self.use_dual_stack
     }
 
+    /// When true, request compression is disabled.
+    pub fn disable_request_compression(&self) -> Option<bool> {
+        self.disable_request_compression
+    }
+
+    /// Configured minimum request compression size.
+    pub fn request_min_compression_size_bytes(&self) -> Option<u32> {
+        self.request_min_compression_size_bytes
+    }
+
     /// Configured stalled stream protection
     pub fn stalled_stream_protection(&self) -> Option<StalledStreamProtectionConfig> {
         self.stalled_stream_protection_config.clone()
     }
 
-    /// Behavior major version configured for this client
+    /// Behavior version configured for this client
     pub fn behavior_version(&self) -> Option<BehaviorVersion> {
-        self.behavior_version.clone()
+        self.behavior_version
+    }
+
+    /// Return an immutable reference to the service config provider configured for this client.
+    pub fn service_config(&self) -> Option<&dyn LoadServiceConfig> {
+        self.service_config.as_deref()
     }
 
     /// Config builder
@@ -731,12 +900,24 @@ impl SdkConfig {
         self.clone().into_builder()
     }
 
+    /// Get the origin of a setting.
+    ///
+    /// This is used internally to understand how to merge config structs while
+    /// respecting precedence of origins.
+    pub fn get_origin(&self, setting: &'static str) -> Origin {
+        self.config_origins
+            .get(setting)
+            .cloned()
+            .unwrap_or_default()
+    }
+
     /// Convert this [`SdkConfig`] back to a builder to enable modification
     pub fn into_builder(self) -> Builder {
         Builder {
             app_name: self.app_name,
             identity_cache: self.identity_cache,
             credentials_provider: self.credentials_provider,
+            token_provider: self.token_provider,
             region: self.region,
             endpoint_url: self.endpoint_url,
             retry_config: self.retry_config,
@@ -748,6 +929,10 @@ impl SdkConfig {
             use_dual_stack: self.use_dual_stack,
             behavior_version: self.behavior_version,
             stalled_stream_protection_config: self.stalled_stream_protection_config,
+            service_config: self.service_config,
+            config_origins: self.config_origins,
+            disable_request_compression: self.disable_request_compression,
+            request_min_compression_size_bytes: self.request_min_compression_size_bytes,
         }
     }
 }

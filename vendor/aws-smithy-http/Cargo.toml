@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "aws-smithy-http"
-version = "0.60.0"
+version = "0.60.11"
 authors = [
     "AWS Rust SDK Team <aws-sdk-rust@amazon.com>",
     "Russell Cohen <rcoh@amazon.com>",
@@ -24,6 +24,10 @@ repository = "https://github.com/smithy-lang/smithy-rs"
 
 [package.metadata.docs.rs]
 all-features = true
+cargo-args = [
+    "-Zunstable-options",
+    "-Zrustdoc-scrape-examples",
+]
 rustdoc-args = [
     "--cfg",
     "docsrs",
@@ -31,18 +35,18 @@ rustdoc-args = [
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies.aws-smithy-eventstream]
-version = "0.60.0"
+version = "0.60.5"
 optional = true
 
 [dependencies.aws-smithy-runtime-api]
-version = "1.0.0"
+version = "1.7.2"
 features = [
     "client",
     "http-02x",
 ]
 
 [dependencies.aws-smithy-types]
-version = "1.0.0"
+version = "1.2.6"
 features = [
     "byte-stream-poll-next",
     "http-body-0-4-x",
@@ -55,13 +59,15 @@ version = "1"
 version = "0.1"
 
 [dependencies.futures-core]
-version = "0.3.14"
+version = "0.3.29"
 
-[dependencies.http]
+[dependencies.http-02x]
 version = "0.2.3"
+package = "http"
 
-[dependencies.http-body]
+[dependencies.http-body-04x]
 version = "0.4.4"
+package = "http-body"
 
 [dependencies.once_cell]
 version = "1.10"
@@ -82,7 +88,7 @@ version = "0.1"
 version = "0.3"
 
 [dev-dependencies.futures-util]
-version = "0.3.16"
+version = "0.3.29"
 default-features = false
 
 [dev-dependencies.hyper]

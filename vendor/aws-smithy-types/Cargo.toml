@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "aws-smithy-types"
-version = "1.0.3"
+version = "1.2.9"
 authors = [
     "AWS Rust SDK Team <aws-sdk-rust@amazon.com>",
     "Russell Cohen <rcoh@amazon.com>",
@@ -24,6 +24,10 @@ repository = "https://github.com/smithy-lang/smithy-rs"
 
 [package.metadata.docs.rs]
 all-features = true
+cargo-args = [
+    "-Zunstable-options",
+    "-Zrustdoc-scrape-examples",
+]
 rustdoc-args = [
     "--cfg",
     "docsrs",
@@ -47,15 +51,31 @@ version = "1"
 version = "0.1"
 
 [dependencies.futures-core]
-version = "0.3.14"
+version = "0.3.29"
+optional = true
 
 [dependencies.http]
 version = "0.2.3"
+optional = true
+
+[dependencies.http-1x]
+version = "1"
+optional = true
+package = "http"
 
 [dependencies.http-body-0-4]
 version = "0.4.4"
 optional = true
 package = "http-body"
+
+[dependencies.http-body-1-0]
+version = "1"
+optional = true
+package = "http-body"
+
+[dependencies.http-body-util]
+version = "0.1.0"
+optional = true
 
 [dependencies.hyper-0-14]
 version = "0.14.26"
@@ -132,7 +152,17 @@ version = "0.1.5"
 
 [features]
 byte-stream-poll-next = []
-http-body-0-4-x = ["dep:http-body-0-4"]
+http-body-0-4-x = [
+    "dep:http-body-0-4",
+    "dep:http",
+]
+http-body-1-x = [
+    "dep:http-body-1-0",
+    "dep:http-body-util",
+    "dep:http-body-0-4",
+    "dep:http-1x",
+    "dep:http",
+]
 hyper-0-14-x = ["dep:hyper-0-14"]
 rt-tokio = [
     "dep:http-body-0-4",
@@ -142,6 +172,8 @@ rt-tokio = [
     "tokio?/fs",
     "tokio?/io-util",
     "tokio-util?/io",
+    "dep:futures-core",
+    "dep:http",
 ]
 serde-deserialize = []
 serde-serialize = []
@@ -150,3 +182,7 @@ test-util = []
 [target."cfg(aws_sdk_unstable)".dependencies.serde]
 version = "1"
 features = ["derive"]
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+priority = 0

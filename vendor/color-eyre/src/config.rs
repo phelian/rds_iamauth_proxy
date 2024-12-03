@@ -492,7 +492,7 @@ impl HookBuilder {
     ///
     /// ```rust
     /// color_eyre::config::HookBuilder::default()
-    ///     .panic_section("consider reporting the bug at https://github.com/yaahc/color-eyre")
+    ///     .panic_section("consider reporting the bug at https://github.com/eyre-rs/eyre/issues")
     ///     .install()
     ///     .unwrap()
     /// ```
@@ -700,7 +700,7 @@ impl HookBuilder {
 
     /// Install the given Hook as the global error report hook
     pub fn install(self) -> Result<(), crate::eyre::Report> {
-        let (panic_hook, eyre_hook) = self.into_hooks();
+        let (panic_hook, eyre_hook) = self.try_into_hooks()?;
         eyre_hook.install()?;
         panic_hook.install();
         Ok(())
@@ -715,6 +715,12 @@ impl HookBuilder {
     /// Create a `PanicHook` and `EyreHook` from this `HookBuilder`.
     /// This can be used if you want to combine these handlers with other handlers.
     pub fn into_hooks(self) -> (PanicHook, EyreHook) {
+        self.try_into_hooks().expect("into_hooks should only be called when no `color_spantrace` themes have previously been set")
+    }
+
+    /// Create a `PanicHook` and `EyreHook` from this `HookBuilder`.
+    /// This can be used if you want to combine these handlers with other handlers.
+    pub fn try_into_hooks(self) -> Result<(PanicHook, EyreHook), crate::eyre::Report> {
         let theme = self.theme;
         #[cfg(feature = "issue-url")]
         let metadata = Arc::new(self.issue_metadata);
@@ -753,9 +759,9 @@ impl HookBuilder {
         };
 
         #[cfg(feature = "capture-spantrace")]
-        color_spantrace::set_theme(self.theme.into()).expect("could not set the provided `Theme` via `color_spantrace::set_theme` globally as another was already set");
+        eyre::WrapErr::wrap_err(color_spantrace::set_theme(self.theme.into()), "could not set the provided `Theme` via `color_spantrace::set_theme` globally as another was already set")?;
 
-        (panic_hook, eyre_hook)
+        Ok((panic_hook, eyre_hook))
     }
 }
 
@@ -914,7 +920,7 @@ fn print_panic_info(report: &PanicReport<'_>, f: &mut fmt::Formatter<'_>) -> fmt
             let issue_section = crate::section::github::IssueSection::new(url, payload)
                 .with_backtrace(report.backtrace.as_ref())
                 .with_location(report.panic_info.location())
-                .with_metadata(&**report.hook.issue_metadata);
+                .with_metadata(&report.hook.issue_metadata);
 
             #[cfg(feature = "capture-spantrace")]
             let issue_section = issue_section.with_span_trace(report.span_trace.as_ref());
@@ -1031,6 +1037,13 @@ pub struct EyreHook {
     issue_filter: Arc<IssueFilterCallback>,
 }
 
+type HookFunc = Box<
+    dyn Fn(&(dyn std::error::Error + 'static)) -> Box<dyn eyre::EyreHandler>
+        + Send
+        + Sync
+        + 'static,
+>;
+
 impl EyreHook {
     #[allow(unused_variables)]
     pub(crate) fn default(&self, error: &(dyn std::error::Error + 'static)) -> crate::Handler {
@@ -1052,6 +1065,7 @@ impl EyreHook {
         crate::Handler {
             filters: self.filters.clone(),
             backtrace,
+            suppress_backtrace: false,
             #[cfg(feature = "capture-spantrace")]
             span_trace,
             sections: Vec::new(),
@@ -1083,14 +1097,7 @@ impl EyreHook {
     }
 
     /// Convert the self into the boxed type expected by `eyre::set_hook`.
-    pub fn into_eyre_hook(
-        self,
-    ) -> Box<
-        dyn Fn(&(dyn std::error::Error + 'static)) -> Box<dyn eyre::EyreHandler>
-            + Send
-            + Sync
-            + 'static,
-    > {
+    pub fn into_eyre_hook(self) -> HookFunc {
         Box::new(move |e| Box::new(self.default(e)))
     }
 }

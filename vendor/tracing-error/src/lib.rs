@@ -18,7 +18,7 @@
 //!
 //! **Note**: This crate is currently experimental.
 //!
-//! *Compiler support: [requires `rustc` 1.42+][msrv]*
+//! *Compiler support: [requires `rustc` 1.63+][msrv]*
 //!
 //! [msrv]: #supported-rust-versions
 //!
@@ -26,10 +26,10 @@
 //!
 //! - `traced-error` - Enables the [`TracedError`] type and related Traits
 //!     - [`InstrumentResult`] and [`InstrumentError`] extension traits, which
-//!     provide an [`in_current_span()`] method for bundling errors with a
-//!     [`SpanTrace`].
+//!       provide an [`in_current_span()`] method for bundling errors with a
+//!       [`SpanTrace`].
 //!     - [`ExtractSpanTrace`] extension trait, for extracting `SpanTrace`s from
-//!     behind `dyn Error` trait objects.
+//!       behind `dyn Error` trait objects.
 //!
 //! ## Usage
 //!
@@ -157,47 +157,39 @@
 //! }
 //! ```
 //!
-//! [`SpanTrace`]: struct.SpanTrace.html
-//! [`ErrorLayer`]: struct.ErrorLayer.html
-//! [`TracedError`]: struct.TracedError.html
-//! [`InstrumentResult`]: trait.InstrumentResult.html
-//! [`InstrumentError`]: trait.InstrumentError.html
-//! [`ExtractSpanTrace`]: trait.ExtractSpanTrace.html
-//! [`in_current_span()`]: trait.InstrumentResult.html#tymethod.in_current_span
-//! [span]: https://docs.rs/tracing/latest/tracing/span/index.html
-//! [events]: https://docs.rs/tracing/latest/tracing/struct.Event.html
-//! [`Subscriber`]: https://docs.rs/tracing/latest/tracing/trait.Subscriber.html
-//! [subscriber layer]: https://docs.rs/tracing-subscriber/latest/tracing_subscriber/layer/trait.Layer.html
-//! [`tracing`]: https://docs.rs/tracing
-//! [`std::error::Error`]: https://doc.rust-lang.org/stable/std/error/trait.Error.html
+//! [`in_current_span()`]: InstrumentResult#tymethod.in_current_span
+//! [span]: mod@tracing::span
+//! [events]: tracing::Event
+//! [`Subscriber`]: tracing::Subscriber
+//! [subscriber layer]: tracing_subscriber::layer::Layer
+//! [`tracing`]: tracing
 //!
 //! ## Supported Rust Versions
 //!
 //! Tracing is built against the latest stable release. The minimum supported
-//! version is 1.42. The current Tracing version is not guaranteed to build on
+//! version is 1.63. The current Tracing version is not guaranteed to build on
 //! Rust versions earlier than the minimum supported version.
 //!
 //! Tracing follows the same compiler support policies as the rest of the Tokio
 //! project. The current stable Rust compiler and the three most recent minor
 //! versions before it will always be supported. For example, if the current
-//! stable compiler version is 1.45, the minimum supported version will not be
-//! increased past 1.42, three minor versions prior. Increasing the minimum
+//! stable compiler version is 1.69, the minimum supported version will not be
+//! increased past 1.66, three minor versions prior. Increasing the minimum
 //! supported compiler version is not considered a semver breaking change as
 //! long as doing so complies with this policy.
 //!
 #![cfg_attr(docsrs, feature(doc_cfg), deny(rustdoc::broken_intra_doc_links))]
-#![doc(html_root_url = "https://docs.rs/tracing-error/0.2.0")]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/tracing/master/assets/logo-type.png",
     issue_tracker_base_url = "https://github.com/tokio-rs/tracing/issues/"
 )]
+#![allow(clippy::needless_doctest_main)]
 #![warn(
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
     unreachable_pub,
     bad_style,
-    const_err,
     dead_code,
     improper_ctypes,
     non_shorthand_field_patterns,
@@ -205,7 +197,8 @@
     overflowing_literals,
     path_statements,
     patterns_in_fns_without_body,
-    private_in_public,
+    private_interfaces,
+    private_bounds,
     unconditional_recursion,
     unused,
     unused_allocation,
@@ -228,9 +221,12 @@ pub use self::layer::ErrorLayer;
 pub mod prelude {
     //! The `tracing-error` prelude.
     //!
-    //! This brings into scope the `InstrumentError, `InstrumentResult`, and `ExtractSpanTrace`
+    //! This brings into scope the `InstrumentError`, `InstrumentResult`, and `ExtractSpanTrace`
     //! extension traits. These traits allow attaching `SpanTrace`s to errors and
     //! subsequently retrieving them from `dyn Error` trait objects.
 
+    // apparently `as _` reexpoorts now generate `unreachable_pub` linting? which
+    // seems wrong to me...
+    #![allow(unreachable_pub)]
     pub use crate::{ExtractSpanTrace as _, InstrumentError as _, InstrumentResult as _};
 }

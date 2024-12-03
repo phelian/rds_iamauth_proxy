@@ -33,7 +33,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! color-eyre = "0.5"
+//! color-eyre = "0.6"
 //! ```
 //!
 //! And install the panic and error report handlers:
@@ -56,7 +56,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! color-eyre = { version = "0.5", default-features = false }
+//! color-eyre = { version = "0.6", default-features = false }
 //! ```
 //!
 //! ### Disabling SpanTrace capture by default
@@ -334,7 +334,7 @@
 //! [`examples/custom_filter.rs`]: https://github.com/yaahc/color-eyre/blob/master/examples/custom_filter.rs
 //! [`examples/custom_section.rs`]: https://github.com/yaahc/color-eyre/blob/master/examples/custom_section.rs
 //! [`examples/multiple_errors.rs`]: https://github.com/yaahc/color-eyre/blob/master/examples/multiple_errors.rs
-#![doc(html_root_url = "https://docs.rs/color-eyre/0.6.2")]
+#![doc(html_root_url = "https://docs.rs/color-eyre/0.6.3")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(
     missing_docs,
@@ -342,7 +342,6 @@
     rust_2018_idioms,
     unreachable_pub,
     bad_style,
-    const_err,
     dead_code,
     improper_ctypes,
     non_shorthand_field_patterns,
@@ -350,8 +349,6 @@
     overflowing_literals,
     path_statements,
     patterns_in_fns_without_body,
-    private_in_public,
-    unconditional_recursion,
     unused,
     unused_allocation,
     unused_comparisons,
@@ -400,6 +397,7 @@ mod writers;
 pub struct Handler {
     filters: Arc<[Box<config::FilterCallback>]>,
     backtrace: Option<Backtrace>,
+    suppress_backtrace: bool,
     #[cfg(feature = "capture-spantrace")]
     span_trace: Option<SpanTrace>,
     sections: Vec<HelpInfo>,

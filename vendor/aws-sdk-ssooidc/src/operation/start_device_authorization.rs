@@ -91,7 +91,10 @@ impl ::aws_smithy_runtime_api::client::runtime_plugin::RuntimePlugin for StartDe
             ::aws_smithy_runtime_api::client::auth::static_resolver::StaticAuthSchemeOptionResolverParams::new(),
         ));
 
-        cfg.store_put(::aws_smithy_http::operation::Metadata::new("StartDeviceAuthorization", "ssooidc"));
+        cfg.store_put(::aws_smithy_runtime_api::client::orchestrator::Metadata::new(
+            "StartDeviceAuthorization",
+            "ssooidc",
+        ));
 
         ::std::option::Option::Some(cfg.freeze())
     }
@@ -102,11 +105,7 @@ impl ::aws_smithy_runtime_api::client::runtime_plugin::RuntimePlugin for StartDe
     ) -> ::std::borrow::Cow<'_, ::aws_smithy_runtime_api::client::runtime_components::RuntimeComponentsBuilder> {
         #[allow(unused_mut)]
         let mut rcb = ::aws_smithy_runtime_api::client::runtime_components::RuntimeComponentsBuilder::new("StartDeviceAuthorization")
-            .with_interceptor(
-                ::aws_smithy_runtime::client::stalled_stream_protection::StalledStreamProtectionInterceptor::new(
-                    ::aws_smithy_runtime::client::stalled_stream_protection::StalledStreamProtectionInterceptorKind::ResponseBody,
-                ),
-            )
+            .with_interceptor(::aws_smithy_runtime::client::stalled_stream_protection::StalledStreamProtectionInterceptor::default())
             .with_interceptor(StartDeviceAuthorizationEndpointParamsInterceptor)
             .with_retry_classifier(::aws_smithy_runtime::client::retries::classifiers::TransientErrorClassifier::<
                 crate::operation::start_device_authorization::StartDeviceAuthorizationError,
@@ -229,6 +228,9 @@ impl ::aws_smithy_runtime_api::client::interceptors::Intercept for StartDeviceAu
     }
 }
 
+// The get_* functions below are generated from JMESPath expressions in the
+// operationContextParams trait. They target the operation's input shape.
+
 /// Error type for the `StartDeviceAuthorizationError` operation.
 #[non_exhaustive]
 #[derive(::std::fmt::Debug)]
@@ -239,7 +241,7 @@ pub enum StartDeviceAuthorizationError {
     InvalidClientException(crate::types::error::InvalidClientException),
     /// <p>Indicates that something is wrong with the input to the request. For example, a required parameter might be missing or out of range.</p>
     InvalidRequestException(crate::types::error::InvalidRequestException),
-    /// <p>Indicates that the client is making the request too frequently and is more than the service can handle. </p>
+    /// <p>Indicates that the client is making the request too frequently and is more than the service can handle.</p>
     SlowDownException(crate::types::error::SlowDownException),
     /// <p>Indicates that the client is not currently authorized to make the request. This can happen when a <code>clientId</code> is not issued for a public client.</p>
     UnauthorizedClientException(crate::types::error::UnauthorizedClientException),

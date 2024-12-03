@@ -5,8 +5,9 @@
 
 //! ByteStream Abstractions
 //!
-//! When the SDK returns streaming binary data, the inner Http Body is wrapped in [ByteStream](crate::byte_stream::ByteStream). ByteStream provides misuse-resistant
-//! primitives to make it easier to handle common patterns with streaming data.
+//! When the SDK returns streaming binary data, the inner Http Body is
+//! wrapped in [`ByteStream`]. ByteStream provides misuse-resistant primitives
+//! to make it easier to handle common patterns with streaming data.
 //!
 //! # Examples
 //!
@@ -149,6 +150,9 @@ pub use self::bytestream_util::FsBuilder;
 #[cfg(feature = "http-body-0-4-x")]
 pub mod http_body_0_4_x;
 
+#[cfg(feature = "http-body-1-x")]
+pub mod http_body_1_x;
+
 pin_project! {
     /// Stream of binary data
     ///
@@ -245,7 +249,7 @@ pin_project! {
     /// 3. **From an `SdkBody` directly**: For more advanced / custom use cases, a ByteStream can be created directly
     /// from an SdkBody. **When created from an SdkBody, care must be taken to ensure retriability.** An SdkBody is retryable
     /// when constructed from in-memory data or when using [`SdkBody::retryable`](crate::body::SdkBody::retryable).
-    ///     ```no_run
+    ///     ```ignore
     ///     # use hyper_0_14 as hyper;
     ///     use aws_smithy_types::byte_stream::ByteStream;
     ///     use aws_smithy_types::body::SdkBody;
@@ -318,6 +322,12 @@ impl ByteStream {
         self.next().await.transpose()
     }
 
+    /// Returns a reference to the data if it is already available in memory
+    pub fn bytes(&self) -> Option<&[u8]> {
+        let Inner { body } = &self.inner;
+        body.bytes()
+    }
+
     /// Return the bounds on the remaining length of the `ByteStream`.
     pub fn size_hint(&self) -> (u64, Option<u64>) {
         self.inner.size_hint()
@@ -343,8 +353,10 @@ impl ByteStream {
         self.inner.collect().await.map_err(Error::streaming)
     }
 
-    /// Returns a [`FsBuilder`](crate::byte_stream::FsBuilder), allowing you to build a `ByteStream` with
-    /// full control over how the file is read (eg. specifying the length of the file or the size of the buffer used to read the file).
+    /// Returns a [`FsBuilder`], allowing you to build a `ByteStream` with
+    /// full control over how the file is read (eg. specifying the length of
+    /// the file or the size of the buffer used to read the file).
+    ///
     /// ```no_run
     /// # #[cfg(feature = "rt-tokio")]
     /// # {
@@ -382,8 +394,7 @@ impl ByteStream {
     /// Furthermore, a partial write MAY seek in the file and resume from the previous location.
     ///
     /// Note: If you want more control, such as specifying the size of the buffer used to read the file
-    /// or the length of the file, use a [`FsBuilder`](crate::byte_stream::FsBuilder) as returned
-    /// from `ByteStream::read_from`
+    /// or the length of the file, use a [`FsBuilder`] as returned from `ByteStream::read_from`.
     ///
     /// # Examples
     /// ```no_run
@@ -462,7 +473,7 @@ impl From<SdkBody> for ByteStream {
     }
 }
 
-/// Construct a retryable ByteStream from [`bytes::Bytes`](bytes::Bytes)
+/// Construct a retryable ByteStream from [`bytes::Bytes`].
 impl From<Bytes> for ByteStream {
     fn from(input: Bytes) -> Self {
         ByteStream::new(SdkBody::from(input))
@@ -471,8 +482,7 @@ impl From<Bytes> for ByteStream {
 
 /// Construct a retryable ByteStream from a `Vec<u8>`.
 ///
-/// This will convert the `Vec<u8>` into [`bytes::Bytes`](bytes::Bytes) to enable efficient
-/// retries.
+/// This will convert the `Vec<u8>` into [`bytes::Bytes`] to enable efficient retries.
 impl From<Vec<u8>> for ByteStream {
     fn from(input: Vec<u8>) -> Self {
         Self::from(Bytes::from(input))
@@ -481,15 +491,15 @@ impl From<Vec<u8>> for ByteStream {
 
 /// Non-contiguous Binary Data Storage
 ///
-/// When data is read from the network, it is read in a sequence of chunks that are not in
-/// contiguous memory. [`AggregatedBytes`](crate::byte_stream::AggregatedBytes) provides a view of
-/// this data via [`impl Buf`](bytes::Buf) or it can be copied into contiguous storage with
+/// When data is read from the network, it is read in a sequence of chunks that are
+/// not in contiguous memory. [`AggregatedBytes`] provides a view of this data via
+/// [`impl Buf`](bytes::Buf) or it can be copied into contiguous storage with
 /// [`.into_bytes()`](crate::byte_stream::AggregatedBytes::into_bytes).
 #[derive(Debug, Clone)]
 pub struct AggregatedBytes(SegmentedBuf<Bytes>);
 
 impl AggregatedBytes {
-    /// Convert this buffer into [`Bytes`](bytes::Bytes)
+    /// Convert this buffer into [`Bytes`].
     ///
     /// # Why does this consume `self`?
     /// Technically, [`copy_to_bytes`](bytes::Buf::copy_to_bytes) can be called without ownership of self. However, since this
@@ -576,11 +586,13 @@ impl Inner {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "rt-tokio"))]
 mod tests {
+    use super::{ByteStream, Inner};
     use crate::body::SdkBody;
-    use crate::byte_stream::Inner;
     use bytes::Bytes;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
     #[tokio::test]
     async fn read_from_string_body() {
@@ -595,10 +607,8 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "rt-tokio")]
     #[tokio::test]
     async fn bytestream_into_async_read() {
-        use super::ByteStream;
         use tokio::io::AsyncBufReadExt;
 
         let byte_stream = ByteStream::from_static(b"data 1\ndata 2\ndata 3");
@@ -610,5 +620,45 @@ mod tests {
         assert_eq!(lines.next_line().await.unwrap(), Some("data 2".to_owned()));
         assert_eq!(lines.next_line().await.unwrap(), Some("data 3".to_owned()));
         assert_eq!(lines.next_line().await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn valid_size_hint() {
+        assert_eq!(ByteStream::from_static(b"hello").size_hint().1, Some(5));
+        assert_eq!(ByteStream::from_static(b"").size_hint().1, Some(0));
+
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(b"hello").unwrap();
+        let body = ByteStream::from_path(f.path()).await.unwrap();
+        assert_eq!(body.inner.size_hint().1, Some(5));
+
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(b"").unwrap();
+        let body = ByteStream::from_path(f.path()).await.unwrap();
+        assert_eq!(body.inner.size_hint().1, Some(0));
+    }
+
+    #[allow(clippy::bool_assert_comparison)]
+    #[tokio::test]
+    async fn valid_eos() {
+        assert_eq!(
+            ByteStream::from_static(b"hello").inner.body.is_end_stream(),
+            false
+        );
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(b"hello").unwrap();
+        let body = ByteStream::from_path(f.path()).await.unwrap();
+        assert_eq!(body.inner.body.content_length(), Some(5));
+        assert!(!body.inner.body.is_end_stream());
+
+        assert_eq!(
+            ByteStream::from_static(b"").inner.body.is_end_stream(),
+            true
+        );
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(b"").unwrap();
+        let body = ByteStream::from_path(f.path()).await.unwrap();
+        assert_eq!(body.inner.body.content_length(), Some(0));
+        assert!(body.inner.body.is_end_stream());
     }
 }

@@ -113,14 +113,17 @@ impl eyre::EyreHandler for Handler {
             }
         }
 
-        if let Some(backtrace) = self.backtrace.as_ref() {
-            let fmted_bt = self.format_backtrace(backtrace);
+        if !self.suppress_backtrace {
+            if let Some(backtrace) = self.backtrace.as_ref() {
+                let fmted_bt = self.format_backtrace(backtrace);
 
-            write!(
-                indented(&mut separated.ready()).with_format(Format::Uniform { indentation: "  " }),
-                "{}",
-                fmted_bt
-            )?;
+                write!(
+                    indented(&mut separated.ready())
+                        .with_format(Format::Uniform { indentation: "  " }),
+                    "{}",
+                    fmted_bt
+                )?;
+            }
         }
 
         let f = separated.ready();
@@ -157,7 +160,7 @@ impl eyre::EyreHandler for Handler {
 
             let issue_section = crate::section::github::IssueSection::new(url, &payload)
                 .with_backtrace(self.backtrace.as_ref())
-                .with_metadata(&**self.issue_metadata);
+                .with_metadata(&self.issue_metadata);
 
             #[cfg(feature = "capture-spantrace")]
             let issue_section = issue_section.with_span_trace(span_trace);

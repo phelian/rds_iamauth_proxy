@@ -4,6 +4,7 @@ use crate::Rng;
 
 use std::cell::Cell;
 use std::ops::RangeBounds;
+use std::vec::Vec;
 
 // Chosen by fair roll of the dice.
 const DEFAULT_RNG_SEED: u64 = 0xef6f79ed30ba75a;
@@ -26,7 +27,7 @@ impl Rng {
     }
 }
 
-thread_local! {
+std::thread_local! {
     static RNG: Cell<Rng> = Cell::new(Rng(random_seed().unwrap_or(DEFAULT_RNG_SEED)));
 }
 
@@ -138,6 +139,12 @@ pub fn shuffle<T>(slice: &mut [T]) {
     with_rng(|r| r.shuffle(slice))
 }
 
+/// Fill a byte slice with random data.
+#[inline]
+pub fn fill(slice: &mut [u8]) {
+    with_rng(|r| r.fill(slice))
+}
+
 macro_rules! integer {
     ($t:tt, $doc:tt) => {
         #[doc = $doc]
@@ -192,8 +199,7 @@ fn random_seed() -> Option<u64> {
     let mut hasher = DefaultHasher::new();
     Instant::now().hash(&mut hasher);
     thread::current().id().hash(&mut hasher);
-    let hash = hasher.finish();
-    Some((hash << 1) | 1)
+    Some(hasher.finish())
 }
 
 #[cfg(all(

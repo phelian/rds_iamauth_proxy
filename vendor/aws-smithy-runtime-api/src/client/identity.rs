@@ -4,7 +4,6 @@
  */
 
 use crate::box_error::BoxError;
-use crate::client::auth::AuthSchemeId;
 use crate::client::runtime_components::sealed::ValidateConfig;
 use crate::client::runtime_components::{RuntimeComponents, RuntimeComponentsBuilder};
 use crate::impl_shared_conversions;
@@ -64,12 +63,7 @@ pub trait ResolveCachedIdentity: fmt::Debug + Send + Sync {
         config_bag: &'a ConfigBag,
     ) -> IdentityFuture<'a>;
 
-    /// Validate the base client configuration for this implementation.
-    ///
-    /// This gets called upon client construction. The full config may not be available at
-    /// this time (hence why it has [`RuntimeComponentsBuilder`] as an argument rather
-    /// than [`RuntimeComponents`]). Any error returned here will become a panic
-    /// in the client constructor.
+    #[doc = include_str!("../../rustdoc/validate_base_client_config.md")]
     fn validate_base_client_config(
         &self,
         runtime_components: &RuntimeComponentsBuilder,
@@ -79,13 +73,7 @@ pub trait ResolveCachedIdentity: fmt::Debug + Send + Sync {
         Ok(())
     }
 
-    /// Validate the final client configuration for this implementation.
-    ///
-    /// This gets called immediately after the [`Intercept::read_before_execution`] trait hook
-    /// when the final configuration has been resolved. Any error returned here will
-    /// cause the operation to return that error.
-    ///
-    /// [`Intercept::read_before_execution`]: crate::client::interceptors::Intercept::read_before_execution
+    #[doc = include_str!("../../rustdoc/validate_final_config.md")]
     fn validate_final_config(
         &self,
         runtime_components: &RuntimeComponents,
@@ -118,6 +106,8 @@ impl ResolveCachedIdentity for SharedIdentityCache {
             .resolve_cached_identity(resolver, runtime_components, config_bag)
     }
 }
+
+impl ValidateConfig for SharedIdentityResolver {}
 
 impl ValidateConfig for SharedIdentityCache {
     fn validate_base_client_config(
@@ -169,6 +159,37 @@ pub trait ResolveIdentity: Send + Sync + Debug {
     fn fallback_on_interrupt(&self) -> Option<Identity> {
         None
     }
+
+    /// Returns the location of an identity cache associated with this identity resolver.
+    ///
+    /// By default, identity resolvers will use the identity cache stored in runtime components.
+    /// Implementing types can change the cache location if they want to. Refer to [`IdentityCacheLocation`]
+    /// explaining why a concrete identity resolver might want to change the cache location.
+    fn cache_location(&self) -> IdentityCacheLocation {
+        IdentityCacheLocation::RuntimeComponents
+    }
+
+    /// Returns the identity cache partition associated with this identity resolver.
+    ///
+    /// By default this returns `None` and cache partitioning is left up to `SharedIdentityResolver`.
+    fn cache_partition(&self) -> Option<IdentityCachePartition> {
+        None
+    }
+}
+
+/// Cache location for identity caching.
+///
+/// Identities are usually cached in the identity cache owned by [`RuntimeComponents`]. However,
+/// we do have identities whose caching mechanism is internally managed by their identity resolver,
+/// in which case we want to avoid the `RuntimeComponents`-owned identity cache interfering with
+/// the internal caching policy.
+#[non_exhaustive]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum IdentityCacheLocation {
+    /// Indicates the identity cache is owned by [`RuntimeComponents`].
+    RuntimeComponents,
+    /// Indicates the identity cache is internally managed by the identity resolver.
+    IdentityResolver,
 }
 
 /// Container for a shared identity resolver.
@@ -181,9 +202,16 @@ pub struct SharedIdentityResolver {
 impl SharedIdentityResolver {
     /// Creates a new [`SharedIdentityResolver`] from the given resolver.
     pub fn new(resolver: impl ResolveIdentity + 'static) -> Self {
+        // NOTE: `IdentityCachePartition` is globally unique by construction so even
+        // custom implementations of `ResolveIdentity::cache_partition()` are unique.
+        let partition = match resolver.cache_partition() {
+            Some(p) => p,
+            None => IdentityCachePartition::new(),
+        };
+
         Self {
             inner: Arc::new(resolver),
-            cache_partition: IdentityCachePartition::new(),
+            cache_partition: partition,
         }
     }
 
@@ -204,41 +232,17 @@ impl ResolveIdentity for SharedIdentityResolver {
     ) -> IdentityFuture<'a> {
         self.inner.resolve_identity(runtime_components, config_bag)
     }
+
+    fn cache_location(&self) -> IdentityCacheLocation {
+        self.inner.cache_location()
+    }
+
+    fn cache_partition(&self) -> Option<IdentityCachePartition> {
+        Some(self.cache_partition())
+    }
 }
 
 impl_shared_conversions!(convert SharedIdentityResolver from ResolveIdentity using SharedIdentityResolver::new);
-
-/// An identity resolver paired with an auth scheme ID that it resolves for.
-#[derive(Clone, Debug)]
-pub(crate) struct ConfiguredIdentityResolver {
-    auth_scheme: AuthSchemeId,
-    identity_resolver: SharedIdentityResolver,
-}
-
-impl ConfiguredIdentityResolver {
-    /// Creates a new [`ConfiguredIdentityResolver`] from the given auth scheme and identity resolver.
-    pub(crate) fn new(
-        auth_scheme: AuthSchemeId,
-        identity_resolver: SharedIdentityResolver,
-    ) -> Self {
-        Self {
-            auth_scheme,
-            identity_resolver,
-        }
-    }
-
-    /// Returns the auth scheme ID.
-    pub(crate) fn scheme_id(&self) -> AuthSchemeId {
-        self.auth_scheme
-    }
-
-    /// Returns the identity resolver.
-    pub(crate) fn identity_resolver(&self) -> SharedIdentityResolver {
-        self.identity_resolver.clone()
-    }
-}
-
-impl ValidateConfig for ConfiguredIdentityResolver {}
 
 /// An identity that can be used for authentication.
 ///

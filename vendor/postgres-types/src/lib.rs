@@ -168,6 +168,13 @@
 //!   'Happy'
 //! );
 //! ```
+//!
+//! ```rust
+//! # #[cfg(feature = "derive")]
+//! use postgres_types::{ToSql, FromSql};
+//!
+//! # #[cfg(feature = "derive")]
+//! #[derive(Debug, ToSql, FromSql)]
 //! #[postgres(allow_mismatch)]
 //! enum Mood {
 //!    Happy,
@@ -269,6 +276,8 @@ mod eui48_1;
 mod geo_types_06;
 #[cfg(feature = "with-geo-types-0_7")]
 mod geo_types_07;
+#[cfg(feature = "with-jiff-0_1")]
+mod jiff_01;
 #[cfg(feature = "with-serde_json-1")]
 mod serde_json_1;
 #[cfg(feature = "with-smol_str-01")]
@@ -484,6 +493,10 @@ impl WrongType {
 /// | `time::OffsetDateTime`          | TIMESTAMP WITH TIME ZONE            |
 /// | `time::Date`                    | DATE                                |
 /// | `time::Time`                    | TIME                                |
+/// | `jiff::civil::Date`             | DATE                                |
+/// | `jiff::civil::DateTime`         | TIMESTAMP                           |
+/// | `jiff::civil::Time`             | TIME                                |
+/// | `jiff::Timestamp`               | TIMESTAMP WITH TIME ZONE            |
 /// | `eui48::MacAddress`             | MACADDR                             |
 /// | `geo_types::Point<f64>`         | POINT                               |
 /// | `geo_types::Rect<f64>`          | BOX                                 |
@@ -1215,7 +1228,7 @@ impl ToSql for IpAddr {
 }
 
 fn downcast(len: usize) -> Result<i32, Box<dyn Error + Sync + Send>> {
-    if len > i32::max_value() as usize {
+    if len > i32::MAX as usize {
         Err("value too large to transmit".into())
     } else {
         Ok(len as i32)

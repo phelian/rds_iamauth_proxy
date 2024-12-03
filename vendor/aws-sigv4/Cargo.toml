@@ -12,7 +12,7 @@
 [package]
 edition = "2021"
 name = "aws-sigv4"
-version = "1.0.3"
+version = "1.2.5"
 authors = [
     "AWS Rust SDK Team <aws-sdk-rust@amazon.com>",
     "David Barsky <me@davidbarsky.com>",
@@ -22,10 +22,13 @@ description = "SigV4 signer for HTTP requests and Event Stream messages."
 readme = "README.md"
 license = "Apache-2.0"
 repository = "https://github.com/smithy-lang/smithy-rs"
-resolver = "1"
 
 [package.metadata.docs.rs]
 all-features = true
+cargo-args = [
+    "-Zunstable-options",
+    "-Zrustdoc-scrape-examples",
+]
 rustdoc-args = [
     "--cfg",
     "docsrs",
@@ -45,21 +48,21 @@ harness = false
 required-features = ["sigv4a"]
 
 [dependencies.aws-credential-types]
-version = "1.0.3"
+version = "1.2.1"
 
 [dependencies.aws-smithy-eventstream]
-version = "0.60.0"
+version = "0.60.5"
 optional = true
 
 [dependencies.aws-smithy-http]
-version = "0.60.0"
+version = "0.60.11"
 
 [dependencies.aws-smithy-runtime-api]
-version = "1.0.3"
+version = "1.7.2"
 features = ["client"]
 
 [dependencies.aws-smithy-types]
-version = "1.0.3"
+version = "1.2.8"
 
 [dependencies.bytes]
 version = "1"
@@ -79,12 +82,13 @@ version = "0.4"
 version = "0.12"
 
 [dependencies.http]
-version = "0.2"
+version = "1"
 optional = true
 
-[dependencies.num-bigint]
-version = "0.4"
+[dependencies.http0]
+version = "0.2"
 optional = true
+package = "http"
 
 [dependencies.once_cell]
 version = "1.8"
@@ -97,9 +101,6 @@ optional = true
 [dependencies.percent-encoding]
 version = "2.1"
 optional = true
-
-[dependencies.regex]
-version = "1.5"
 
 [dependencies.ring]
 version = "0.17.5"
@@ -123,14 +124,14 @@ version = "^1"
 optional = true
 
 [dev-dependencies.aws-credential-types]
-version = "1.0.3"
+version = "1.2.1"
 features = [
     "test-util",
     "hardcoded-credentials",
 ]
 
 [dev-dependencies.aws-smithy-runtime-api]
-version = "1.0.3"
+version = "1.7.2"
 features = [
     "client",
     "test-util",
@@ -171,11 +172,15 @@ version = "0.3.5"
 features = ["parsing"]
 
 [features]
-default = ["sign-http"]
-http0-compat = ["dep:http"]
+default = [
+    "sign-http",
+    "http1",
+]
+http0-compat = ["dep:http0"]
+http1 = ["dep:http"]
 sign-eventstream = ["dep:aws-smithy-eventstream"]
 sign-http = [
-    "dep:http",
+    "dep:http0",
     "dep:percent-encoding",
     "dep:form_urlencoded",
 ]

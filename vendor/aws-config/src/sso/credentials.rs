@@ -23,7 +23,6 @@ use aws_smithy_types::DateTime;
 use aws_types::os_shim_internal::{Env, Fs};
 use aws_types::region::Region;
 use aws_types::SdkConfig;
-use std::convert::TryInto;
 
 /// SSO Credentials Provider
 ///
@@ -63,7 +62,7 @@ impl SsoCredentialsProvider {
                     .start_url(&sso_provider_config.start_url)
                     .session_name(session_name)
                     .region(sso_provider_config.region.clone())
-                    .build_sync(),
+                    .build_with(env.clone(), fs.clone()),
             )
         } else {
             None

@@ -69,6 +69,7 @@ cfg_if! {
     if #[cfg(ossl300)] {
         extern "C" {
             pub fn EVP_default_properties_is_fips_enabled(libctx: *mut OSSL_LIB_CTX) -> c_int;
+            pub fn EVP_default_properties_enable_fips(libctx: *mut OSSL_LIB_CTX, enable: c_int) -> c_int;
         }
     }
 }
@@ -92,6 +93,8 @@ extern "C" {
     pub fn EVP_DigestFinal(ctx: *mut EVP_MD_CTX, res: *mut u8, n: *mut u32) -> c_int;
     #[cfg(ossl111)]
     pub fn EVP_DigestFinalXOF(ctx: *mut EVP_MD_CTX, res: *mut u8, len: usize) -> c_int;
+    #[cfg(ossl330)]
+    pub fn EVP_DigestSqueeze(ctx: *mut EVP_MD_CTX, res: *mut u8, len: usize) -> c_int;
 
     #[cfg(ossl300)]
     pub fn EVP_MD_fetch(
@@ -469,8 +472,11 @@ extern "C" {
 
     pub fn EVP_PKEY_set1_RSA(k: *mut EVP_PKEY, r: *mut RSA) -> c_int;
     pub fn EVP_PKEY_get1_RSA(k: *mut EVP_PKEY) -> *mut RSA;
+    pub fn EVP_PKEY_set1_DSA(k: *mut EVP_PKEY, k: *mut DSA) -> c_int;
     pub fn EVP_PKEY_get1_DSA(k: *mut EVP_PKEY) -> *mut DSA;
+    pub fn EVP_PKEY_set1_DH(k: *mut EVP_PKEY, k: *mut DH) -> c_int;
     pub fn EVP_PKEY_get1_DH(k: *mut EVP_PKEY) -> *mut DH;
+    pub fn EVP_PKEY_set1_EC_KEY(k: *mut EVP_PKEY, k: *mut EC_KEY) -> c_int;
     pub fn EVP_PKEY_get1_EC_KEY(k: *mut EVP_PKEY) -> *mut EC_KEY;
 
     pub fn EVP_PKEY_new() -> *mut EVP_PKEY;
@@ -537,6 +543,12 @@ extern "C" {
 
     #[cfg(ossl300)]
     pub fn EVP_PKEY_CTX_set_signature_md(ctx: *mut EVP_PKEY_CTX, md: *const EVP_MD) -> c_int;
+
+    #[cfg(ossl300)]
+    pub fn EVP_PKEY_CTX_set_params(ctx: *mut EVP_PKEY_CTX, params: *const OSSL_PARAM) -> c_int;
+
+    #[cfg(ossl300)]
+    pub fn EVP_PKEY_CTX_get_params(ctx: *mut EVP_PKEY_CTX, params: *mut OSSL_PARAM) -> c_int;
 
     pub fn EVP_PKEY_new_mac_key(
         type_: c_int,

@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+#![allow(unknown_lints)]
 #![allow(clippy::module_inception)]
 #![allow(clippy::upper_case_acronyms)]
 #![allow(clippy::large_enum_variant)]
@@ -10,8 +11,12 @@
 #![allow(clippy::needless_return)]
 #![allow(clippy::derive_partial_eq_without_eq)]
 #![allow(clippy::result_large_err)]
+#![allow(clippy::unnecessary_map_on_constructor)]
 #![allow(rustdoc::bare_urls)]
+#![allow(rustdoc::redundant_explicit_links)]
+#![forbid(unsafe_code)]
 #![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 //! IAM Identity Center OpenID Connect (OIDC) is a web service that enables a client (such as CLI or a native application) to register with IAM Identity Center. The service also enables the client to fetch the user’s access token upon successful authentication and authorization with IAM Identity Center.
 //!
 //! __Considerations for Using This Guide__
@@ -35,8 +40,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! aws-config = { version = "1.0.3", features = ["behavior-version-latest"] }
-//! aws-sdk-ssooidc = "1.4.0"
+//! aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
+//! aws-sdk-ssooidc = "1.50.0"
 //! tokio = { version = "1", features = ["full"] }
 //! ```
 //!
@@ -82,7 +87,7 @@
 //! either a successful output or a [`SdkError`](crate::error::SdkError).
 //!
 //! Some of these API inputs may be structs or enums to provide more complex structured information.
-//! These structs and enums live in [`types`](crate::types). There are some simpler types for
+//! There are some simpler types for
 //! representing data such as date times or binary blobs that live in [`primitives`](crate::primitives).
 //!
 //! All types required to configure a client via the [`Config`](crate::Config) struct live

@@ -8,7 +8,7 @@ cfg_not_wasi! {
 use std::fmt;
 use std::io;
 use std::net::{self, SocketAddr};
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 cfg_net! {
     /// A TCP socket server, listening for connections.
@@ -58,7 +58,7 @@ cfg_net! {
 
 impl TcpListener {
     cfg_not_wasi! {
-        /// Creates a new TcpListener, which will be bound to the specified address.
+        /// Creates a new `TcpListener`, which will be bound to the specified address.
         ///
         /// The returned listener is ready for accepting connections.
         ///
